@@ -113,23 +113,24 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     ]
     async_add_entities(switches)
 
-# Registriere einen benutzerdefinierten Service für den AUTO-Modus
-async def handle_auto_mode(call):
-    """Handler für den benutzerdefinierten turn_auto Service."""
-    entity_id = call.data.get("entity_id")  # Die ID des Entitäts-Schalters
-    last_value = call.data.get("last_value", 0)  # Standardwert 0
-    duration = call.data.get("duration", 0)  # Standardwert 0 für AUTO
+    # Registriere den benutzerdefinierten Service innerhalb von async_setup_entry
+    async def handle_auto_mode(call):
+        """Handler für den benutzerdefinierten turn_auto Service."""
+        entity_id = call.data.get("entity_id")  # Die ID des Entitäts-Schalters
+        last_value = call.data.get("last_value", 0)  # Standardwert 0
+        duration = call.data.get("duration", 0)  # Standardwert 0 für AUTO
 
-    # Durchlaufe alle Schalter und finde den passenden anhand der entity_id
-    for switch in switches:
-        if switch.entity_id == entity_id:
-            # Rufe die Methode auf, die den Schalter auf AUTO setzt
-            await switch.async_turn_auto(last_value=last_value, duration=duration)
+        # Durchlaufe alle Schalter und finde den passenden anhand der entity_id
+        for switch in switches:
+            if switch.entity_id == entity_id:
+                # Rufe die Methode auf, die den Schalter auf AUTO setzt
+                await switch.async_turn_auto(last_value=last_value, duration=duration)
 
-# Registriere den Service "turn_auto" im Home Assistant-System
-hass.services.async_register(
-    DOMAIN, "turn_auto", handle_auto_mode
-)
+    # Registriere den Service "turn_auto" im Home Assistant-System
+    hass.services.async_register(
+        DOMAIN, "turn_auto", handle_auto_mode
+    )
+
 
 SWITCHES = [
     {"name": "Pump Switch", "key": "PUMP", "icon": "mdi:water-pump"},
