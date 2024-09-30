@@ -66,16 +66,18 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
             _LOGGER.error(f"Unerwarteter Fehler beim Senden des {action} Befehls an {self._key}: {err}")
 
     async def async_turn_on(self, **kwargs):
-        duration = kwargs.get("duration", 0)
+        """Schaltet den Schalter auf ON."""
+        duration = kwargs.get("duration", 0)  # Standardwert 0
         last_value = kwargs.get("last_value", 0)  # Standardwert 0
         await self._send_command("ON", duration, last_value)
 
     async def async_turn_off(self, **kwargs):
+        """Schaltet den Schalter auf OFF."""
         last_value = kwargs.get("last_value", 0)  # Standardwert 0
         await self._send_command("OFF", 0, last_value)
 
     async def async_turn_auto(self, **kwargs):
-        """Schaltet den Schalter auf Auto."""
+        """Schaltet den Schalter auf AUTO."""
         duration = kwargs.get("duration", 0)  # Standardwert für Auto-Modus
         last_value = kwargs.get("last_value", 0)  # Standardwert 0
         await self._send_command("AUTO", duration, last_value)
