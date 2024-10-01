@@ -49,9 +49,8 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
                 async with self.session.get(url, auth=auth) as response:
                     response.raise_for_status()
                     response_text = await response.text()
-                    lines = response_text.strip().split('\n')
-
-                    if len(lines) >= 3 and lines[0] == "OK" and lines[1] == self._key and f"SWITCHED_TO_{action}" in lines[2]:
+                    lines = response_text.strip().split('\\n')
+                    if len(lines) >= 3 and lines[0] == "OK" and lines[1] == self._key and lines[2] == f"SWITCHED_TO_{action}":
                         _LOGGER.debug(f"Erfolgreich {action} Befehl an {self._key} gesendet mit Dauer {duration} und letztem Wert {last_value}")
                         await self.coordinator.async_request_refresh()
                     else:
@@ -66,21 +65,17 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
             _LOGGER.error(f"Unerwarteter Fehler beim Senden des {action} Befehls an {self._key}: {err}")
 
     async def async_turn_on(self, **kwargs):
-        """Schaltet den Schalter auf ON."""
-        duration = kwargs.get("duration", 0)  # Standardwert 0
+        duration = kwargs.get("duration", 0)
         last_value = kwargs.get("last_value", 0)  # Standardwert 0
         await self._send_command("ON", duration, last_value)
 
     async def async_turn_off(self, **kwargs):
-        """Schaltet den Schalter auf OFF."""
         last_value = kwargs.get("last_value", 0)  # Standardwert 0
         await self._send_command("OFF", 0, last_value)
 
     async def async_turn_auto(self, **kwargs):
-        """Schaltet den Schalter auf AUTO."""
-        duration = kwargs.get("duration", 0)  # Standardwert für Auto-Modus
         last_value = kwargs.get("last_value", 0)  # Standardwert 0
-        await self._send_command("AUTO", duration, last_value)
+        await self._send_command("AUTO", 0, last_value)
 
     @property
     def icon(self):
@@ -112,25 +107,6 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         for switch in available_switches
     ]
     async_add_entities(switches)
-
-    # Registriere den benutzerdefinierten Service innerhalb von async_setup_entry
-    async def handle_auto_mode(call):
-        """Handler für den benutzerdefinierten turn_auto Service."""
-        entity_id = call.data.get("entity_id")  # Die ID des Entitäts-Schalters
-        last_value = call.data.get("last_value", 0)  # Standardwert 0
-        duration = call.data.get("duration", 0)  # Standardwert 0 für AUTO
-
-        # Durchlaufe alle Schalter und finde den passenden anhand der entity_id
-        for switch in switches:
-            if switch.entity_id == entity_id:
-                # Rufe die Methode auf, die den Schalter auf AUTO setzt
-                await switch.async_turn_auto(last_value=last_value, duration=duration)
-
-    # Registriere den Service "turn_auto" im Home Assistant-System
-    hass.services.async_register(
-        DOMAIN, "turn_auto", handle_auto_mode
-    )
-
 
 SWITCHES = [
     {"name": "Pump Switch", "key": "PUMP", "icon": "mdi:water-pump"},
