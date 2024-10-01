@@ -22,7 +22,7 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
         self.ip_address = coordinator.ip_address
         self.username = coordinator.username
         self.password = coordinator.password
-        self.session = coordinator.session
+        self.session = coordinator.session  # Session wird wiederverwendet
 
         if not all([self.ip_address, self.username, self.password]):
             _LOGGER.error(f"Fehlende Zugangsdaten oder IP-Adresse für den Schalter {self._key}")
@@ -38,7 +38,7 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def is_auto(self):
-        return self._get_switch_state() == 0  # Hier prüfst du, ob der Zustand "AUTO" ist
+        return self._get_switch_state() == 0
 
     async def _send_command(self, action, duration=0, last_value=0):
         url = f"http://{self.ip_address}{API_SET_FUNCTION_MANUALLY}?{self._key},{action},{duration},{last_value}"
@@ -52,7 +52,7 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
                     lines = response_text.strip().split('\\n')
                     if len(lines) >= 3 and lines[0] == "OK" and lines[1] == self._key and lines[2].startswith(f"SWITCHED_TO_{action}"):
                         _LOGGER.debug(f"Erfolgreich {action} Befehl an {self._key} gesendet mit Dauer {duration} und letztem Wert {last_value}")
-                        await self.coordinator.async_request_refresh()
+                        await self.coordinator.async_request_refresh()  # Status-Refresh nach erfolgreichem Befehl
                     else:
                         _LOGGER.error(f"Unerwartete Antwort vom Server beim Senden des {action} Befehls an {self._key}: {response_text}")
         except aiohttp.ClientResponseError as resp_err:
@@ -79,15 +79,17 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def icon(self):
-        if self._key == "PUMP":
-            return "mdi:water-pump" if self.is_on else "mdi:water-pump-off"
-        elif self._key == "LIGHT":
-            return "mdi:lightbulb-on" if self.is_on else "mdi:lightbulb"
-        elif self._key == "ECO":
-            return "mdi:leaf" if self.is_on else "mdi:leaf-off"
-        elif self._key in ["DOS_1_CL", "DOS_4_PHM"]:
-            return "mdi:flask" if self.is_on else "mdi:flask-outline"
-        return self._icon
+        # Dynamisches Icon-Handling basierend auf den Schlüsseltypen
+        dynamic_icons = {
+            "PUMP": ("mdi:water-pump", "mdi:water-pump-off"),
+            "LIGHT": ("mdi:lightbulb-on", "mdi:lightbulb"),
+            "ECO": ("mdi:leaf", "mdi:leaf-off"),
+            "DOS_1_CL": ("mdi:flask", "mdi:flask-outline"),
+            "DOS_4_PHM": ("mdi:flask", "mdi:flask-outline")
+        }
+        
+        on_icon, off_icon = dynamic_icons.get(self._key, (self._icon, self._icon))
+        return on_icon if self.is_on else off_icon
 
     @property
     def device_info(self):
