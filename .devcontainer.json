@@ -1,0 +1,55 @@
+{
+    "name": "xerolux/test",
+    "image": "mcr.microsoft.com/vscode/devcontainers/python:dev-3.12",
+    "postCreateCommand": "scripts/setup",
+    "forwardPorts": [
+        8123
+    ],
+    "portsAttributes": {
+        "8123": {
+            "label": "Home Assistant",
+            "onAutoForward": "notify"
+        }
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.black-formatter",
+                "ms-python.vscode-pylance",
+                "ryanluker.vscode-coverage-gutters",
+                "github.vscode-github-actions",
+                "github.vscode-pull-request-github"
+            ],
+            "settings": {
+                "editor.defaultFormatter": "ms-python.black-formatter",
+                "editor.formatOnSave": true,
+                "editor.tabSize": 4,
+                "files.eol": "\n",
+                "files.trimTrailingWhitespace": true,
+                "python.pythonPath": "/usr/local/bin/python3.12",
+                "python.autoComplete.extraPaths": [
+                    "/home/vscode/.local/lib/python3.12/site-packages",
+                    "/usr/local/lib/python3.12/site-packages",
+                    "/usr/local/lib/python3.12",
+                    "/usr/local/lib/python3.12/lib-dynload"
+                ],
+                "python.analysis.typeCheckingMode": "basic",
+                "python.analysis.diagnosticMode": "workspace",
+                "python.analysis.include": ["custom_components/**/*.py"],
+                "python.analysis.autoSearchPaths": true,
+                "python.analysis.indexing": true,
+                "python.analysis.autoImportCompletions": true,
+                "python.analysis.importFormat": "relative",
+                "python.analysis.inlayHints.variableTypes": true,
+                "python.analysis.inlayHints.functionReturnTypes": true,
+                "python.analysis.inlayHints.callArgumentNames": "all",
+                "python.analysis.inlayHints.pytestParameters": true
+            }
+        }
+    },
+    "remoteUser": "vscode",
+    "features": {
+        "ghcr.io/devcontainers/features/rust:1": {}
+    }
+}
