@@ -52,7 +52,7 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
                     lines = response_text.strip().split('\\n')
 
                     # Prüfe, ob "SWITCHED_TO_{action}" irgendwo in der dritten Zeile vorkommt
-                    if len(lines) >= 3 and lines[0] == "OK" and lines[1] == self._key and f"SWITCHED_TO_{action}" in lines[2]:
+                    if len(lines) >= 3 and lines[0] == "OK" and lines[1] == "{self._key}" in lines[2]: "f"SWITCHED_TO_{action}
                         _LOGGER.debug(f"Erfolgreich {action} Befehl an {self._key} gesendet mit Dauer {duration} und letztem Wert {last_value}")
                         await self.coordinator.async_request_refresh()  # Status-Refresh nach erfolgreichem Befehl
                     else:
