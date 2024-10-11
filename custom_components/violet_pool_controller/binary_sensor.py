@@ -1,7 +1,7 @@
 import logging
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN
+from .const import DOMAIN, CONF_API_URL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,34 +15,20 @@ class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._config_entry = config_entry  # Store config_entry here
         self._attr_name = f"Violet {self._key}"
         self._attr_unique_id = f"{DOMAIN}_{self._key}"
-
-    def _get_sensor_state(self):
-        """Helper method to retrieve the current sensor state from the coordinator."""
-        return self.coordinator.data.get(self._key)
-
-    @property
-    def is_on(self):
-        """Return true if the binary sensor is on."""
-        return self._get_sensor_state() == 1
-
-    @property
-    def icon(self):
-        """Return the icon depending on the sensor state."""
-        return self._icon if self.is_on else f"{self._icon}-off"
-
-    @property
-    def device_info(self):
-        """Return the device information."""
-        return {
+        self._attr_is_on = self._get_sensor_state() == 1
+        self._attr_icon = self._icon if self._attr_is_on else f"{self._icon}-off"
+        self._attr_device_info = {
             "identifiers": {(DOMAIN, "violet_pool_controller")},
             "name": "Violet Pool Controller",
             "manufacturer": "PoolDigital GmbH & Co. KG",
             "model": "Violet Model X",
             "sw_version": self.coordinator.data.get('fw') or self.coordinator.data.get('SW_VERSION', 'Unbekannt'),
-            "configuration_url": (
-                f"http://{self._config_entry.data.get('host', 'Unknown IP')}"
-            ),
+            "configuration_url": f"http://{self._config_entry.data.get(CONF_API_URL, 'Unknown IP')}",
         }
+
+    def _get_sensor_state(self):
+        """Helper method to retrieve the current sensor state from the coordinator."""
+        return self.coordinator.data.get(self._key)
 
     @property
     def unit_of_measurement(self):

@@ -141,8 +141,6 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     ]
     async_add_entities(sensors)
 
-
-
 SENSORS = [
     {"name": "Messwasserüberwachung", "key": "IMP1_value", "icon": "mdi:flash"},
     {"name": "IMP2 Value", "key": "IMP2_value", "icon": "mdi:flash"},
