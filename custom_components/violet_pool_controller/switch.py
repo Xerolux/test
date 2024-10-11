@@ -54,7 +54,7 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
                     async with self.session.get(url, auth=auth) as response:
                         response.raise_for_status()
                         response_text = await response.text()
-                        lines = response_text.strip().split('\\n')
+                        lines = response_text.strip().split('\n')
                         if len(lines) >= 3 and lines[0] == "OK" and lines[1] == self._key and lines[2] == f"SWITCHED_TO_{action}":
                             _LOGGER.debug(f"Erfolgreich {action} Befehl an {self._key} gesendet mit Dauer {duration} und letztem Wert {last_value}")
                             await self.coordinator.async_request_refresh()
@@ -120,6 +120,13 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
             attributes['auto_reset_in'] = max(0, remaining_time)
         else:
             attributes['auto_reset_in'] = "N/A"
+
+        # Weitere Geräteinformationen aus den Koordinatordaten hinzufügen
+        attributes['sw_version'] = self.coordinator.data.get('fw') or self.coordinator.data.get('SW_VERSION', 'Unbekannt')
+        attributes['sw_version_carrier'] = self.coordinator.data.get('SW_VERSION_CARRIER', 'Nicht verfügbar')
+        attributes['hw_version_carrier'] = self.coordinator.data.get('HW_VERSION_CARRIER', 'Nicht verfügbar')
+        attributes['hw_serial_carrier'] = self.coordinator.data.get('HW_SERIAL_CARRIER', 'Nicht verfügbar')
+
         return attributes
 
     @property
@@ -129,7 +136,10 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
             "name": "Violet Pool Controller",
             "manufacturer": "PoolDigital GmbH & Co. KG",
             "model": "Violet Model X",
-            "sw_version": self.coordinator.data.get('fw', 'Unbekannt'),
+            "sw_version": self.coordinator.data.get('fw') or self.coordinator.data.get('SW_VERSION', 'Unbekannt'),
+            "sw_version_carrier": self.coordinator.data.get('SW_VERSION_CARRIER', 'Nicht verfügbar'),
+            "hw_version_carrier": self.coordinator.data.get('HW_VERSION_CARRIER', 'Nicht verfügbar'),
+            "hw_serial_carrier": self.coordinator.data.get('HW_SERIAL_CARRIER', 'Nicht verfügbar'),
         }
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
