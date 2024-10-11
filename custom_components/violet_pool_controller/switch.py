@@ -120,9 +120,4 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 SWITCHES = [
     {"name": "Pump Switch", "key": "PUMP", "icon": "mdi:water-pump"},
     {"name": "Light Switch", "key": "LIGHT", "icon": "mdi:lightbulb"},
-    {"name": "ECO Mode", "key": "ECO", "icon": "mdi:leaf"},
-    {"name": "Dosing CL", "key": "DOS_1_CL", "icon": "mdi:flask"},
-    {"name": "Dosing PHM", "key": "DOS_4_PHM", "icon": "mdi:flask-outline"},
-    {"name": "External 1", "key": "EXT_1", "icon": "mdi:power-socket"},
-    {"name": "External 2", "key": "EXT_2", "icon": "mdi:power-socket"},
 ]
