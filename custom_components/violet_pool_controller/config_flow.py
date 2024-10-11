@@ -5,6 +5,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import aiohttp_client
+import re  # Für die Validierung der Firmware-Version
 from .const import (
     DOMAIN,
     CONF_API_URL,
@@ -21,6 +22,11 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Validierung der Firmware-Version
+def is_valid_firmware(firmware_version):
+    """Validiere, ob die Firmware-Version im richtigen Format vorliegt (z.B. 1.23)."""
+    return bool(re.match(r'^\d+\.\d+$', firmware_version))
+
 class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Violet Pool Controller."""
 
@@ -35,7 +41,7 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             use_ssl = user_input.get(CONF_USE_SSL, DEFAULT_USE_SSL)
             protocol = "https" if use_ssl else "http"
 
-            # Dynamically create the full API URL with the endpoint
+            # Dynamisch erstellte vollständige API-URL
             api_url = f"{protocol}://{base_ip}{API_READINGS}"
             _LOGGER.debug("Constructed API URL: %s", api_url)
 
@@ -44,56 +50,96 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             password = user_input.get(CONF_PASSWORD)
             device_id = user_input.get(CONF_DEVICE_ID, 1)
 
-            await self.async_set_unique_id(base_ip)  # Only the IP address is used
+            await self.async_set_unique_id(base_ip)  # Use the base IP as the unique ID
             self._abort_if_unique_id_configured()
 
             session = aiohttp_client.async_get_clientsession(self.hass)
+
+            # Ping vor vollständiger Anfrage, um Verfügbarkeit zu prüfen
             try:
-                timeout_duration = user_input.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
-                async with async_timeout.timeout(timeout_duration):
-                    auth = aiohttp.BasicAuth(username, password)
-                    _LOGGER.debug(
-                        "Versuche, eine Verbindung zur API bei %s herzustellen (SSL=%s)",
-                        api_url,
-                        use_ssl,
-                    )
-
-                    async with session.get(api_url, auth=auth, ssl=use_ssl) as response:
-                        response.raise_for_status()
-                        data = await response.json()
-
-                        _LOGGER.debug("API-Antwort empfangen: %s", data)
-
-                        firmware_version = data.get('fw')
-                        if not firmware_version:
-                            _LOGGER.error(
-                                "Firmware-Version in der API-Antwort nicht gefunden: %s", data
-                            )
-                            errors["base"] = "firmware_not_found"
-                            raise ValueError("Firmware-Version nicht gefunden.")
-
+                async with session.get(f"{protocol}://{base_ip}/ping", auth=aiohttp.BasicAuth(username, password), ssl=use_ssl) as ping_response:
+                    ping_response.raise_for_status()
+                _LOGGER.debug("API-Ping erfolgreich")
             except aiohttp.ClientError as err:
-                _LOGGER.error("Fehler beim Verbinden mit der API bei %s: %s", api_url, err)
+                _LOGGER.error("API-Ping fehlgeschlagen bei %s: %s", base_ip, err)
                 errors["base"] = "cannot_connect"
-            except ValueError as err:
-                _LOGGER.error("Ungültige Antwort erhalten: %s", err)
-                errors["base"] = "invalid_response"
-            except Exception as err:
-                _LOGGER.error("Unerwartete Ausnahme: %s", err)
-                errors["base"] = "unknown"
-            else:
-                # Save only the IP address in `CONF_API_URL`
+                raise ValueError("API-Ping fehlgeschlagen.")
+
+            # Timeout-Dauer dynamisch anpassen, um Ressourcen zu sparen
+            timeout_duration = user_input.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
+            if timeout_duration < 5:
+                timeout_duration = 5  # Setze Minimum-Timeout
+            elif timeout_duration > 60:
+                timeout_duration = 60  # Begrenze auf 60 Sekunden
+
+            retry_attempts = 3  # Wiederholungsversuche bei Verbindungsfehlern
+            for attempt in range(retry_attempts):
+                try:
+                    async with async_timeout.timeout(timeout_duration):
+                        auth = aiohttp.BasicAuth(username, password)
+                        _LOGGER.debug(
+                            "Versuche, eine Verbindung zur API bei %s herzustellen (SSL=%s)",
+                            api_url,
+                            use_ssl,
+                        )
+
+                        async with session.get(api_url, auth=auth, ssl=use_ssl) as response:
+                            response.raise_for_status()
+                            data = await response.json()
+                            _LOGGER.debug("API-Antwort empfangen: %s", data)
+
+                            # Dynamische Suche nach möglichen Schlüsseln der Firmware
+                            possible_keys = ['fw', 'firmware', 'version', 'firmware_version']
+                            firmware_version = next((data.get(key) for key in possible_keys if data.get(key)), None)
+
+                            if not firmware_version:
+                                _LOGGER.error("Firmware-Version in der API-Antwort nicht gefunden: %s", data)
+                                errors["base"] = "firmware_not_found"
+                                raise ValueError("Firmware-Version nicht gefunden.")
+                            else:
+                                if is_valid_firmware(firmware_version):
+                                    _LOGGER.info("Firmware-Version erfolgreich ausgelesen und validiert: %s", firmware_version)
+                                else:
+                                    _LOGGER.error("Ungültige Firmware-Version: %s", firmware_version)
+                                    errors["base"] = "invalid_firmware"
+                                    raise ValueError("Ungültige Firmware-Version.")
+
+                        # Beende die Schleife bei erfolgreicher API-Abfrage
+                        break
+                except aiohttp.ClientConnectionError as err:
+                    _LOGGER.error("Verbindungsfehler zur API bei %s: %s", api_url, err)
+                    errors["base"] = "connection_error"
+                    if attempt + 1 == retry_attempts:
+                        raise ValueError("Verbindungsfehler nach mehreren Versuchen.")
+                except aiohttp.ClientResponseError as err:
+                    _LOGGER.error("Fehlerhafte API-Antwort erhalten (Statuscode: %s): %s", err.status, err.message)
+                    errors["base"] = "invalid_response"
+                    break
+                except asyncio.TimeoutError:
+                    _LOGGER.error("Zeitüberschreitung bei der API-Anfrage.")
+                    errors["base"] = "timeout"
+                    break
+                except Exception as err:
+                    _LOGGER.error("Unerwartete Ausnahme: %s", err)
+                    errors["base"] = "unknown"
+                    break
+
+            if not errors:
+                # Nur die IP-Adresse speichern, um unnötige Daten zu vermeiden
                 user_input[CONF_API_URL] = base_ip
                 user_input[CONF_DEVICE_NAME] = device_name
                 user_input[CONF_USERNAME] = username
                 user_input[CONF_PASSWORD] = password
                 user_input[CONF_DEVICE_ID] = device_id
+
+                # Erfolgreiche Konfiguration
                 return self.async_create_entry(
                     title=f"{device_name} (ID {device_id})", data=user_input
                 )
 
+        # Formular für den Benutzer anzeigen
         data_schema = vol.Schema({
-            vol.Required(CONF_API_URL): str,  # Only IP address
+            vol.Required(CONF_API_URL): str,  # Nur die IP-Adresse wird eingegeben
             vol.Required(CONF_USERNAME): str,
             vol.Required(CONF_PASSWORD): str,
             vol.Optional(CONF_POLLING_INTERVAL, default=DEFAULT_POLLING_INTERVAL): vol.All(vol.Coerce(int), vol.Range(min=5, max=3600)),
