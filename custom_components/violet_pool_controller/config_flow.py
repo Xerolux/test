@@ -24,8 +24,8 @@ _LOGGER = logging.getLogger(__name__)
 
 # Validierung der Firmware-Version
 def is_valid_firmware(firmware_version):
-    """Validiere, ob die Firmware-Version im richtigen Format vorliegt (z.B. 1.23)."""
-    return bool(re.match(r'^\d+\.\d+$', firmware_version))
+    """Validiere, ob die Firmware-Version im richtigen Format vorliegt (z.B. 1.1.4)."""
+    return bool(re.match(r'^\d+\.\d+\.\d+$', firmware_version))
 
 class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Violet Pool Controller."""
@@ -88,21 +88,20 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             data = await response.json()
                             _LOGGER.debug("API-Antwort empfangen: %s", data)
 
-                            # Dynamische Suche nach möglichen Schlüsseln der Firmware
-                            possible_keys = ['fw', 'firmware', 'version', 'firmware_version']
-                            firmware_version = next((data.get(key) for key in possible_keys if data.get(key)), None)
+                            # Firmware-Version explizit aus dem Feld "fw" auslesen
+                            firmware_version = data.get('fw')
 
                             if not firmware_version:
                                 _LOGGER.error("Firmware-Version in der API-Antwort nicht gefunden: %s", data)
                                 errors["base"] = "firmware_not_found"
                                 raise ValueError("Firmware-Version nicht gefunden.")
                             else:
+                                # Optional: Validierung des Firmware-Formats
                                 if is_valid_firmware(firmware_version):
-                                    _LOGGER.info("Firmware-Version erfolgreich ausgelesen und validiert: %s", firmware_version)
+                                    _LOGGER.info("Firmware-Version erfolgreich ausgelesen: %s", firmware_version)
                                 else:
-                                    _LOGGER.error("Ungültige Firmware-Version: %s", firmware_version)
+                                    _LOGGER.error("Ungültige Firmware-Version erhalten: %s", firmware_version)
                                     errors["base"] = "invalid_firmware"
-                                    raise ValueError("Ungültige Firmware-Version.")
 
                         # Beende die Schleife bei erfolgreicher API-Abfrage
                         break
