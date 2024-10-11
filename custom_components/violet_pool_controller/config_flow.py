@@ -78,8 +78,13 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             data = await response.json()
                             _LOGGER.debug("API-Antwort empfangen: %s", data)
 
-                            # Firmware-Version explizit aus dem Feld "fw" auslesen
-                            firmware_version = data.get('fw')
+                            # Firmware-Version entweder aus 'sw' oder 'SW_VERSION' auslesen
+                            firmware_version = data.get('sw') or data.get('SW_VERSION')
+
+                            # Zusätzlich die Daten von 'SW_VERSION_CARRIER', 'HW_VERSION_CARRIER', 'HW_SERIAL_CARRIER' auslesen
+                            sw_version_carrier = data.get('SW_VERSION_CARRIER')
+                            hw_version_carrier = data.get('HW_VERSION_CARRIER')
+                            hw_serial_carrier = data.get('HW_SERIAL_CARRIER')
 
                             if not firmware_version:
                                 _LOGGER.error("Firmware-Version in der API-Antwort nicht gefunden: %s", data)
@@ -92,6 +97,11 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                 else:
                                     _LOGGER.error("Ungültige Firmware-Version erhalten: %s", firmware_version)
                                     errors["base"] = "invalid_firmware"
+
+                            # Zusätzliche Informationen zu SW_VERSION_CARRIER, HW_VERSION_CARRIER und HW_SERIAL_CARRIER anzeigen
+                            _LOGGER.info("Carrier Software-Version (SW_VERSION_CARRIER): %s", sw_version_carrier or "Nicht verfügbar")
+                            _LOGGER.info("Carrier Hardware-Version (HW_VERSION_CARRIER): %s", hw_version_carrier or "Nicht verfügbar")
+                            _LOGGER.info("Carrier Hardware-Seriennummer (HW_SERIAL_CARRIER): %s", hw_serial_carrier or "Nicht verfügbar")
 
                     # Beende die Schleife bei erfolgreicher API-Abfrage
                     break
