@@ -38,7 +38,7 @@ class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
             "name": "Violet Pool Controller",
             "manufacturer": "PoolDigital GmbH & Co. KG",
             "model": "Violet Model X",
-            "sw_version": self.coordinator.data.get('fw', 'Unknown'),
+            "sw_version": self.coordinator.data.get('FW', 'Unknown'),
             "configuration_url": (
                 f"http://{self._config_entry.data.get('host', 'Unknown IP')}"
             ),
@@ -46,7 +46,7 @@ class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def unit_of_measurement(self):
-        """Return the unit of measurement."""
+        """Return the unit of measurement, if applicable."""
         return self._get_unit_for_key(self._key)
 
     def _get_unit_for_key(self, key):
@@ -84,21 +84,12 @@ class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
             "PUMP_RPM_1": "RPM",
             "PUMP_RPM_2": "RPM",
             "PUMP_RPM_3": "RPM",
-            "SYSTEM_carrier_alive_count": None,
-            "SYSTEM_ext1module_alive_count": None,
-            "SYSTEM_dosagemodule_alive_count": None,
             "DOS_1_CL_DAILY_DOSING_AMOUNT_ML": "mL",
             "DOS_1_CL_TOTAL_CAN_AMOUNT_ML": "mL",
             "DOS_2_ELO_DAILY_DOSING_AMOUNT_ML": "mL",
             "DOS_2_ELO_TOTAL_CAN_AMOUNT_ML": "mL",
             "DOS_4_PHM_DAILY_DOSING_AMOUNT_ML": "mL",
             "DOS_4_PHM_TOTAL_CAN_AMOUNT_ML": "mL",
-            "PUMP_RUNTIME": None,
-            "SOLAR_RUNTIME": None,
-            "HEATER_RUNTIME": None,
-            "BACKWASH_RUNTIME": None,
-            "OMNI_DC0_RUNTIME": None,
-            "OMNI_DC1_RUNTIME": None,
             "CPU_TEMP": "°C",
             "SYSTEM_MEMORY": "MB",
             "LOAD_AVG": "%",
@@ -118,7 +109,7 @@ class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
             "CHLORINE_LEVEL": "ppm",
             "BROMINE_LEVEL": "ppm",
         }
-        return units.get(self._key, None)
+        return units.get(key, None)
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up Violet Device binary sensors from a config entry."""
@@ -131,8 +122,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
 BINARY_SENSORS = [
     {"name": "Pump State", "key": "PUMP_STATE", "icon": "mdi:water-pump"},
-    {"name": "Solar State", "key": "SOLARSTATE", "icon": "mdi:solar-power"},
-    {"name": "Heater State", "key": "HEATERSTATE", "icon": "mdi:radiator"},
+    {"name": "Solar State", "key": "SOLAR_STATE", "icon": "mdi:solar-power"},
+    {"name": "Heater State", "key": "HEATER_STATE", "icon": "mdi:radiator"},
     {"name": "Cover State", "key": "COVER_STATE", "icon": "mdi:garage"},
     {"name": "Refill State", "key": "REFILL_STATE", "icon": "mdi:water-boiler"},
     {"name": "Light State", "key": "LIGHT_STATE", "icon": "mdi:lightbulb"},

@@ -49,7 +49,8 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             session = aiohttp_client.async_get_clientsession(self.hass)
             try:
-                async with async_timeout.timeout(10):
+                timeout_duration = user_input.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
+                async with async_timeout.timeout(timeout_duration):
                     auth = aiohttp.BasicAuth(username, password)
                     _LOGGER.debug(
                         "Versuche, eine Verbindung zur API bei %s herzustellen (SSL=%s)",
@@ -95,7 +96,7 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_API_URL): str,  # Only IP address
             vol.Required(CONF_USERNAME): str,
             vol.Required(CONF_PASSWORD): str,
-            vol.Optional(CONF_POLLING_INTERVAL, default=DEFAULT_POLLING_INTERVAL): int,
+            vol.Optional(CONF_POLLING_INTERVAL, default=DEFAULT_POLLING_INTERVAL): vol.All(vol.Coerce(int), vol.Range(min=5, max=3600)),
             vol.Optional(CONF_USE_SSL, default=DEFAULT_USE_SSL): bool,
             vol.Optional(CONF_DEVICE_NAME, default="Violet Pool Controller"): str,
             vol.Required(CONF_DEVICE_ID, default=1): vol.All(vol.Coerce(int), vol.Range(min=1)),
@@ -141,7 +142,7 @@ class VioletOptionsFlow(config_entries.OptionsFlow):
             vol.Optional(
                 CONF_POLLING_INTERVAL,
                 default=self.config_entry.data.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
-            ): int,
+            ): vol.All(vol.Coerce(int), vol.Range(min=5, max=3600)),
             vol.Optional(
                 CONF_USE_SSL,
                 default=self.config_entry.data.get(CONF_USE_SSL, DEFAULT_USE_SSL)
