@@ -38,7 +38,7 @@ class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
             "name": "Violet Pool Controller",
             "manufacturer": "PoolDigital GmbH & Co. KG",
             "model": "Violet Model X",
-            "sw_version": self.coordinator.data.get('FW', 'Unknown'),
+            "sw_version": self.coordinator.data.get('fw', 'Unbekannt', 'SW_VERSION'),
             "configuration_url": (
                 f"http://{self._config_entry.data.get('host', 'Unknown IP')}"
             ),
