@@ -122,15 +122,27 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
             attributes['auto_reset_in'] = "N/A"
         return attributes
 
-    @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, "violet_pool_controller")},
-            "name": "Violet Pool Controller",
-            "manufacturer": "PoolDigital GmbH & Co. KG",
-            "model": "Violet Model X",
-            "sw_version": self.coordinator.data.get('fw', 'Unbekannt'),
-        }
+@property
+def device_info(self):
+    # Firmware-Version entweder aus 'fw' oder 'SW_VERSION' auslesen
+    firmware_version = self.coordinator.data.get('fw') or self.coordinator.data.get('SW_VERSION', 'Unbekannt')
+    
+    # Carrier-Daten auslesen
+    sw_version_carrier = self.coordinator.data.get('SW_VERSION_CARRIER', 'Unbekannt')
+    hw_version_carrier = self.coordinator.data.get('HW_VERSION_CARRIER', 'Unbekannt')
+    hw_serial_carrier = self.coordinator.data.get('HW_SERIAL_CARRIER', 'Unbekannt')
+
+    return {
+        "identifiers": {(DOMAIN, "violet_pool_controller")},
+        "name": "Violet Pool Controller",
+        "manufacturer": "PoolDigital GmbH & Co. KG",
+        "model": "Violet Model X",
+        "sw_version": firmware_version,  # Firmware-Version aus 'fw' oder 'SW_VERSION'
+        "hw_version": hw_version_carrier,  # Hardware-Version des Carriers
+        "hw_serial": hw_serial_carrier,    # Hardware-Seriennummer des Carriers
+        "sw_version_carrier": sw_version_carrier,  # Software-Version des Carriers
+        "configuration_url": f"http://{self._config_entry.data.get('host', 'Unknown IP')}",
+    }
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
