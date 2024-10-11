@@ -30,27 +30,19 @@ class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
         """Return the icon depending on the sensor state."""
         return self._icon if self.is_on else f"{self._icon}-off"
 
-@property
-def device_info(self):
-    # Firmware-Version entweder aus 'fw' oder 'SW_VERSION' auslesen
-    firmware_version = self.coordinator.data.get('fw') or self.coordinator.data.get('SW_VERSION', 'Unbekannt')
-    
-    # Carrier-Daten auslesen
-    sw_version_carrier = self.coordinator.data.get('SW_VERSION_CARRIER', 'Unbekannt')
-    hw_version_carrier = self.coordinator.data.get('HW_VERSION_CARRIER', 'Unbekannt')
-    hw_serial_carrier = self.coordinator.data.get('HW_SERIAL_CARRIER', 'Unbekannt')
-
-    return {
-        "identifiers": {(DOMAIN, "violet_pool_controller")},
-        "name": "Violet Pool Controller",
-        "manufacturer": "PoolDigital GmbH & Co. KG",
-        "model": "Violet Model X",
-        "sw_version": firmware_version,  # Firmware-Version aus 'fw' oder 'SW_VERSION'
-        "hw_version": hw_version_carrier,  # Hardware-Version des Carriers
-        "hw_serial": hw_serial_carrier,    # Hardware-Seriennummer des Carriers
-        "sw_version_carrier": sw_version_carrier,  # Software-Version des Carriers
-        "configuration_url": f"http://{self._config_entry.data.get('host', 'Unknown IP')}",
-    }
+    @property
+    def device_info(self):
+        """Return the device information."""
+        return {
+            "identifiers": {(DOMAIN, "violet_pool_controller")},
+            "name": "Violet Pool Controller",
+            "manufacturer": "PoolDigital GmbH & Co. KG",
+            "model": "Violet Model X",
+            "sw_version": self.coordinator.data.get('FW', 'Unknown'),
+            "configuration_url": (
+                f"http://{self._config_entry.data.get('host', 'Unknown IP')}"
+            ),
+        }
 
     @property
     def unit_of_measurement(self):
