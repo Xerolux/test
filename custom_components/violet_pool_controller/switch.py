@@ -55,11 +55,11 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
                         response.raise_for_status()
                         response_text = await response.text()
                         lines = response_text.strip().split('\n')
-                        if len(lines) >= 3 and lines[0] == "OK" and lines[1] == self._key and "SWITCHED_TO" in lines[2]:
+                        if len(lines) >= 3 and lines[0] == "OK" and lines[1] == self._key and ("SWITCHED_TO" in lines[2] or "ON" in lines[2] or "OFF" in lines[2]):
                             _LOGGER.debug(f"Erfolgreich {action} Befehl an {self._key} gesendet mit Dauer {duration} und letztem Wert {last_value}")
                             await self.coordinator.async_request_refresh()
                             return
-                        elif len(lines) >= 3 and lines[0] == "OK" and lines[1] == self._key and "SWITCHED_TO" in lines[2] and "PERMANENTLY" in lines[2]:
+                        elif len(lines) >= 3 and lines[0] == "OK" and lines[1] == self._key and ("SWITCHED_TO" in lines[2] or "ON" in lines[2] or "OFF" in lines[2]) and "PERMANENTLY" in lines[2]:
                             _LOGGER.debug(f"Erfolgreich {action} Befehl an {self._key} gesendet (dauerhaft) mit Dauer {duration} und letztem Wert {last_value}")
                             await self.coordinator.async_request_refresh()
                             return
