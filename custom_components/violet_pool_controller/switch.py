@@ -59,6 +59,10 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
                             _LOGGER.debug(f"Erfolgreich {action} Befehl an {self._key} gesendet mit Dauer {duration} und letztem Wert {last_value}")
                             await self.coordinator.async_request_refresh()
                             return
+                        elif len(lines) >= 3 and lines[0] == "OK" and lines[1] == self._key and "SWITCHED_TO" in lines[2] and "PERMANENTLY" in lines[2]:
+                            _LOGGER.debug(f"Erfolgreich {action} Befehl an {self._key} gesendet (dauerhaft) mit Dauer {duration} und letztem Wert {last_value}")
+                            await self.coordinator.async_request_refresh()
+                            return
                         else:
                             _LOGGER.error(f"Unerwartete Antwort vom Server beim Senden des {action} Befehls an {self._key}: {response_text}")
             except aiohttp.ClientResponseError as resp_err:
