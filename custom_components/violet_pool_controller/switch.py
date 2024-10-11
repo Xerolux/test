@@ -81,8 +81,9 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
 
     async def async_turn_auto(self, **kwargs):
         _LOGGER.debug(f"async_turn_auto aufgerufen für {self._key} mit Argumenten: {kwargs}")
+        auto_delay = kwargs.get("auto_delay", 0)  # Zeit in Sekunden bis zum AUTO-Rücksetzen
         last_value = kwargs.get("last_value", 0)  # Standardwert 0
-        await self._send_command("AUTO", 0, last_value)
+        await self._send_command("AUTO", auto_delay, last_value)
 
     @property
     def icon(self):
