@@ -55,17 +55,7 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             session = aiohttp_client.async_get_clientsession(self.hass)
 
-            # Ping vor vollständiger Anfrage, um Verfügbarkeit zu prüfen
-            try:
-                async with session.get(f"{protocol}://{base_ip}/ping", auth=aiohttp.BasicAuth(username, password), ssl=use_ssl) as ping_response:
-                    ping_response.raise_for_status()
-                _LOGGER.debug("API-Ping erfolgreich")
-            except aiohttp.ClientError as err:
-                _LOGGER.error("API-Ping fehlgeschlagen bei %s: %s", base_ip, err)
-                errors["base"] = "cannot_connect"
-                raise ValueError("API-Ping fehlgeschlagen.")
-
-            # Timeout-Dauer dynamisch anpassen, um Ressourcen zu sparen
+            # Timeout-Dauer dynamisch anpassen
             timeout_duration = user_input.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
             if timeout_duration < 5:
                 timeout_duration = 5  # Setze Minimum-Timeout
@@ -103,8 +93,8 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                     _LOGGER.error("Ungültige Firmware-Version erhalten: %s", firmware_version)
                                     errors["base"] = "invalid_firmware"
 
-                        # Beende die Schleife bei erfolgreicher API-Abfrage
-                        break
+                    # Beende die Schleife bei erfolgreicher API-Abfrage
+                    break
                 except aiohttp.ClientConnectionError as err:
                     _LOGGER.error("Verbindungsfehler zur API bei %s: %s", api_url, err)
                     errors["base"] = "connection_error"
