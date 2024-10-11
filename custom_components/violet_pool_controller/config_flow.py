@@ -20,12 +20,45 @@ from .const import (
     API_READINGS,  # API endpoint
 )
 
+# Timeout-Limits als Konstanten definieren
+MIN_TIMEOUT_DURATION = 5
+MAX_TIMEOUT_DURATION = 60
+
 _LOGGER = logging.getLogger(__name__)
 
 # Validierung der Firmware-Version
 def is_valid_firmware(firmware_version):
     """Validiere, ob die Firmware-Version im richtigen Format vorliegt (z.B. 1.1.4)."""
-    return bool(re.match(r'^\d+\.\d+\.\d+$', firmware_version))
+    return bool(re.match(r'^[1-9]\d*\.\d+\.\d+$', firmware_version))
+
+async def fetch_api_data(session, api_url, auth, use_ssl, timeout_duration, retry_attempts):
+    """Fetch data from the API with retry logic."""
+    for attempt in range(retry_attempts):
+        try:
+            async with async_timeout.timeout(timeout_duration):
+                _LOGGER.debug(
+                    "Versuche, eine Verbindung zur API bei %s herzustellen (SSL=%s)",
+                    api_url,
+                    use_ssl,
+                )
+                async with session.get(api_url, auth=auth, ssl=use_ssl) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+                    _LOGGER.debug("API-Antwort empfangen: %s", data)
+                    return data
+        except aiohttp.ClientConnectionError as err:
+            _LOGGER.error("Verbindungsfehler zur API bei %s: %s", api_url, err)
+            if attempt + 1 == retry_attempts:
+                raise ValueError("Verbindungsfehler nach mehreren Versuchen.")
+        except aiohttp.ClientResponseError as err:
+            _LOGGER.error("Fehlerhafte API-Antwort erhalten (Statuscode: %s): %s", err.status, err.message)
+            raise ValueError("Fehlerhafte API-Antwort.")
+        except asyncio.TimeoutError:
+            _LOGGER.error("Zeitüberschreitung bei der API-Anfrage.")
+            raise ValueError("Zeitüberschreitung bei der API-Anfrage.")
+        except Exception as err:
+            _LOGGER.error("Unerwartete Ausnahme: %s", err)
+            raise ValueError("Unerwartete Ausnahme.")
 
 class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Violet Pool Controller."""
@@ -57,71 +90,18 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             # Timeout-Dauer dynamisch anpassen
             timeout_duration = user_input.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
-            if timeout_duration < 5:
-                timeout_duration = 5  # Setze Minimum-Timeout
-            elif timeout_duration > 60:
-                timeout_duration = 60  # Begrenze auf 60 Sekunden
+            timeout_duration = max(MIN_TIMEOUT_DURATION, min(timeout_duration, MAX_TIMEOUT_DURATION))
 
             retry_attempts = 3  # Wiederholungsversuche bei Verbindungsfehlern
-            for attempt in range(retry_attempts):
-                try:
-                    async with async_timeout.timeout(timeout_duration):
-                        auth = aiohttp.BasicAuth(username, password)
-                        _LOGGER.debug(
-                            "Versuche, eine Verbindung zur API bei %s herzustellen (SSL=%s)",
-                            api_url,
-                            use_ssl,
-                        )
+            auth = aiohttp.BasicAuth(username, password)
 
-                        async with session.get(api_url, auth=auth, ssl=use_ssl) as response:
-                            response.raise_for_status()
-                            data = await response.json()
-                            _LOGGER.debug("API-Antwort empfangen: %s", data)
+            try:
+                data = await fetch_api_data(session, api_url, auth, use_ssl, timeout_duration, retry_attempts)
 
-                            # Firmware-Version entweder aus 'sw' oder 'SW_VERSION' auslesen
-                            firmware_version = data.get('sw') or data.get('SW_VERSION')
+                await self._process_firmware_data(data, errors)
 
-                            # Zusätzlich die Daten von 'SW_VERSION_CARRIER', 'HW_VERSION_CARRIER', 'HW_SERIAL_CARRIER' auslesen
-                            sw_version_carrier = data.get('SW_VERSION_CARRIER')
-                            hw_version_carrier = data.get('HW_VERSION_CARRIER')
-                            hw_serial_carrier = data.get('HW_SERIAL_CARRIER')
-
-                            if not firmware_version:
-                                _LOGGER.error("Firmware-Version in der API-Antwort nicht gefunden: %s", data)
-                                errors["base"] = "firmware_not_found"
-                                raise ValueError("Firmware-Version nicht gefunden.")
-                            else:
-                                # Optional: Validierung des Firmware-Formats
-                                if is_valid_firmware(firmware_version):
-                                    _LOGGER.info("Firmware-Version erfolgreich ausgelesen: %s", firmware_version)
-                                else:
-                                    _LOGGER.error("Ungültige Firmware-Version erhalten: %s", firmware_version)
-                                    errors["base"] = "invalid_firmware"
-
-                            # Zusätzliche Informationen zu SW_VERSION_CARRIER, HW_VERSION_CARRIER und HW_SERIAL_CARRIER anzeigen
-                            _LOGGER.info("Carrier Software-Version (SW_VERSION_CARRIER): %s", sw_version_carrier or "Nicht verfügbar")
-                            _LOGGER.info("Carrier Hardware-Version (HW_VERSION_CARRIER): %s", hw_version_carrier or "Nicht verfügbar")
-                            _LOGGER.info("Carrier Hardware-Seriennummer (HW_SERIAL_CARRIER): %s", hw_serial_carrier or "Nicht verfügbar")
-
-                    # Beende die Schleife bei erfolgreicher API-Abfrage
-                    break
-                except aiohttp.ClientConnectionError as err:
-                    _LOGGER.error("Verbindungsfehler zur API bei %s: %s", api_url, err)
-                    errors["base"] = "connection_error"
-                    if attempt + 1 == retry_attempts:
-                        raise ValueError("Verbindungsfehler nach mehreren Versuchen.")
-                except aiohttp.ClientResponseError as err:
-                    _LOGGER.error("Fehlerhafte API-Antwort erhalten (Statuscode: %s): %s", err.status, err.message)
-                    errors["base"] = "invalid_response"
-                    break
-                except asyncio.TimeoutError:
-                    _LOGGER.error("Zeitüberschreitung bei der API-Anfrage.")
-                    errors["base"] = "timeout"
-                    break
-                except Exception as err:
-                    _LOGGER.error("Unerwartete Ausnahme: %s", err)
-                    errors["base"] = "unknown"
-                    break
+            except ValueError as err:
+                _LOGGER.error("%s", err)
 
             if not errors:
                 # Nur die IP-Adresse speichern, um unnötige Daten zu vermeiden
@@ -152,6 +132,33 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=data_schema,
             errors=errors,
         )
+
+    async def _process_firmware_data(self, data, errors):
+        """Process firmware data and validate."""
+        # Firmware-Version aus 'fw' oder 'SW_VERSION' auslesen
+        firmware_version = data.get('fw') or data.get('SW_VERSION')
+
+        # Zusätzlich die Daten von 'SW_VERSION_CARRIER', 'HW_VERSION_CARRIER', 'HW_SERIAL_CARRIER' auslesen
+        sw_version_carrier = data.get('SW_VERSION_CARRIER')
+        hw_version_carrier = data.get('HW_VERSION_CARRIER')
+        hw_serial_carrier = data.get('HW_SERIAL_CARRIER')
+
+        if not firmware_version:
+            _LOGGER.error("Firmware-Version in der API-Antwort nicht gefunden: %s", data)
+            errors["base"] = "firmware_not_found"
+            raise ValueError("Firmware-Version nicht gefunden.")
+        else:
+            # Optional: Validierung des Firmware-Formats
+            if is_valid_firmware(firmware_version):
+                _LOGGER.info("Firmware-Version erfolgreich ausgelesen: %s", firmware_version)
+            else:
+                _LOGGER.error("Ungültige Firmware-Version erhalten: %s", firmware_version)
+                errors["base"] = "invalid_firmware"
+
+        # Zusätzliche Informationen zu SW_VERSION_CARRIER, HW_VERSION_CARRIER und HW_SERIAL_CARRIER anzeigen
+        _LOGGER.info("Carrier Software-Version (SW_VERSION_CARRIER): %s", sw_version_carrier or "Nicht verfügbar")
+        _LOGGER.info("Carrier Hardware-Version (HW_VERSION_CARRIER): %s", hw_version_carrier or "Nicht verfügbar")
+        _LOGGER.info("Carrier Hardware-Seriennummer (HW_SERIAL_CARRIER): %s", hw_serial_carrier or "Nicht verfügbar")
 
     @staticmethod
     @callback
