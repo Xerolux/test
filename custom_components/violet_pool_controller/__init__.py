@@ -74,9 +74,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         _LOGGER.info(f"Setting {entity_id} to AUTO mode with delay {auto_delay} seconds and last value {last_value}")
 
+        # Ensure the appropriate function is called to turn the device to AUTO mode
         await coordinator.turn_auto(entity_id, auto_delay, last_value)
 
-    # Register the service with Home Assistant
+    # Register the service
     hass.services.async_register(DOMAIN, "turn_auto", handle_turn_auto_service)
 
     # Forward setup to platforms (e.g., switch, sensor, binary sensor)
