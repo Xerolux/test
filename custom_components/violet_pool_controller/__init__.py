@@ -5,7 +5,7 @@ from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from datetime import timedelta
 import async_timeout
-import aiohttp  # Ensure aiohttp is imported for HTTP requests
+import aiohttp
 import asyncio
 from typing import Any, Dict
 
@@ -23,14 +23,20 @@ from .const import (
     API_SET_FUNCTION_MANUALLY
 )
 
-
 _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Violet Pool Controller from a config entry."""
     
     # Retrieve configuration data from the config entry
-    config = await _get_config_from_entry(entry)
+    config = {
+        "ip_address": entry.data[CONF_API_URL],
+        "polling_interval": entry.data.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL),
+        "use_ssl": entry.data.get(CONF_USE_SSL, DEFAULT_USE_SSL),
+        "device_id": entry.data.get(CONF_DEVICE_ID, 1),
+        "username": entry.data.get(CONF_USERNAME),
+        "password": entry.data.get(CONF_PASSWORD)
+    }
 
     # Log configuration data
     _LOGGER.info(f"Setting up Violet Pool Controller with config: {config}")
@@ -61,22 +67,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Register the custom service for 'turn_auto'
     async def handle_turn_auto_service(call):
-        """
-        Handle the custom 'turn_auto' service.
-        
-        Service data:
-        - entity_id (str): The ID of the entity to control.
-        - auto_delay (int): The delay in seconds before AUTO mode is activated (default: 0).
-        - last_value (int): The last value to apply to the switch (default: 0).
-        """
+        """Handle the custom turn_auto service."""
         entity_id = call.data.get("entity_id")
         auto_delay = call.data.get("auto_delay", 0)
         last_value = call.data.get("last_value", 0)
 
         _LOGGER.info(f"Setting {entity_id} to AUTO mode with delay {auto_delay} seconds and last value {last_value}")
 
-        # Ensure the appropriate function is called to turn the device to AUTO mode
-        await coordinator.turn_auto(entity_id, auto_delay, last_value)
+        await coordinator.turn_auto(auto_delay, last_value)
 
     # Register the service
     hass.services.async_register(DOMAIN, "turn_auto", handle_turn_auto_service)
@@ -88,20 +86,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     return True
 
-async def _get_config_from_entry(entry: ConfigEntry) -> Dict[str, Any]:
-    """
-    Get the configuration from the entry and handle dynamic updates.
-
-    Returns a dictionary with configuration data.
-    """
-    return {
-        "ip_address": entry.data[CONF_API_URL],
-        "polling_interval": entry.data.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL),
-        "use_ssl": entry.data.get(CONF_USE_SSL, DEFAULT_USE_SSL),
-        "device_id": entry.data.get(CONF_DEVICE_ID, 1),
-        "username": entry.data.get(CONF_USERNAME),
-        "password": entry.data.get(CONF_PASSWORD)
-    }
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
@@ -115,6 +99,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.info(f"Violet Pool Controller (device {entry.entry_id}) unloaded successfully")
     return unload_ok
+
 
 class VioletDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching Violet Pool Controller data."""
@@ -174,10 +159,10 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
 
             await asyncio.sleep(2 ** attempt)  # Exponential backoff on retries
 
-    async def turn_auto(self, entity_id: str, auto_delay: int, last_value: int):
+    async def turn_auto(self, auto_delay: int, last_value: int):
         """Send command to set the switch to AUTO mode."""
         protocol = "https" if self.use_ssl else "http"
-        url = f"{protocol}://{self.ip_address}{API_SET_FUNCTION_MANUALLY}?{entity_id},AUTO,{auto_delay},{last_value}"
+        url = f"{protocol}://{self.ip_address}{API_SET_FUNCTION_MANUALLY}?PUMP,AUTO,{auto_delay},{last_value}"
 
         auth = aiohttp.BasicAuth(self.username, self.password)
 
@@ -186,10 +171,11 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
                 async with self.session.get(url, auth=auth, ssl=self.use_ssl) as response:
                     _LOGGER.debug(f"Status Code: {response.status}")
                     response.raise_for_status()
-                    _LOGGER.info(f"Switch {entity_id} set to AUTO mode with delay {auto_delay} and last value {last_value}")
+                    _LOGGER.info(f"Switch set to AUTO mode with delay {auto_delay} and last value {last_value}")
         except aiohttp.ClientError as client_err:
-            _LOGGER.error(f"Error setting switch {entity_id} to AUTO mode: {client_err}")
+            _LOGGER.error(f"Error setting switch to AUTO mode: {client_err}")
         except asyncio.TimeoutError:
-            _LOGGER.error(f"Timeout while setting switch {entity_id} to AUTO mode")
+            _LOGGER.error(f"Timeout while setting switch to AUTO mode")
         except Exception as err:
-            _LOGGER.error(f"Unexpected error while setting switch {entity_id} to AUTO mode: {err}")
+            _LOGGER.error(f"Unexpected error while setting switch to AUTO mode: {err}")
+

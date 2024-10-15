@@ -1,15 +1,20 @@
 import logging
+import aiohttp
+import asyncio
+from datetime import datetime, timedelta
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN, API_SET_FUNCTION_MANUALLY
+import async_timeout
+
+from .const import (
+    DOMAIN, 
+    API_SET_FUNCTION_MANUALLY
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 class VioletSwitch(CoordinatorEntity, SwitchEntity):
-    """Representation of a switch that controls various functions of the Violet Pool Controller."""
-
     def __init__(self, coordinator, key, name, icon):
-        """Initialize the switch."""
         super().__init__(coordinator)
         self._key = key
         self._icon = icon
@@ -19,47 +24,81 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
         self.username = coordinator.username
         self.password = coordinator.password
         self.session = coordinator.session
-        self.timeout = coordinator.timeout if hasattr(coordinator, 'timeout') else 10
+        self.timeout = coordinator.timeout if hasattr(coordinator, 'timeout') else 10  # Customizable timeout
+        self.auto_reset_time = None  # For automatic reset after duration
+
+        if not all([self.ip_address, self.username, self.password]):
+            _LOGGER.error(f"Missing credentials or IP address for switch {self._key}")
+        else:
+            _LOGGER.info(f"VioletSwitch for {self._key} initialized with IP {self.ip_address}")
+
+    def _get_switch_state(self):
+        """Fetches the current state of the switch."""
+        return self.coordinator.data.get(self._key)
 
     @property
     def is_on(self):
-        """Return true if the switch is on."""
-        return self.coordinator.data.get(self._key) in (1, 4)
+        return self._get_switch_state() in (1, 4)
 
     @property
     def is_auto(self):
-        """Return true if the switch is in auto mode."""
-        return self.coordinator.data.get(self._key) == 0
+        return self._get_switch_state() == 0
 
     async def _send_command(self, action, duration=0, last_value=0):
-        """Send the control command to the API."""
+        """Sends the control command to the API and handles retries."""
         url = f"http://{self.ip_address}{API_SET_FUNCTION_MANUALLY}?{self._key},{action},{duration},{last_value}"
         auth = aiohttp.BasicAuth(self.username, self.password)
-        
-        try:
-            async with self.session.get(url, auth=auth, timeout=self.timeout) as response:
-                response.raise_for_status()
-                _LOGGER.info(f"Sent {action} command to {self._key} with duration {duration} and last_value {last_value}")
-                await self.coordinator.async_request_refresh()
-        except Exception as e:
-            _LOGGER.error(f"Failed to send {action} command to {self._key}: {e}")
+
+        retry_attempts = 3
+        for attempt in range(retry_attempts):
+            try:
+                async with async_timeout.timeout(self.timeout):
+                    async with self.session.get(url, auth=auth) as response:
+                        response.raise_for_status()
+                        response_text = await response.text()
+                        lines = response_text.strip().split('\n')
+                        if len(lines) >= 3 and lines[0] == "OK" and lines[1] == self._key and ("SWITCHED_TO" in lines[2] or "ON" in lines[2] or "OFF" in lines[2]):
+                            _LOGGER.debug(f"Successfully sent {action} command to {self._key} with duration {duration} and last value {last_value}")
+                            await self.coordinator.async_request_refresh()
+                            return
+                        else:
+                            _LOGGER.error(f"Unexpected response from server when sending {action} command to {self._key}: {response_text}")
+            except aiohttp.ClientResponseError as resp_err:
+                _LOGGER.error(f"Response error when sending {action} command to {self._key}: {resp_err.status} {resp_err.message}")
+            except aiohttp.ClientError as err:
+                _LOGGER.error(f"Client error when sending {action} command to {self._key}: {err}")
+            except asyncio.TimeoutError:
+                _LOGGER.error(f"Timeout sending {action} command to {self._key}, attempt {attempt + 1} of {retry_attempts}")
+            except Exception as err:
+                _LOGGER.error(f"Unexpected error when sending {action} command to {self._key}: {err}")
 
     async def async_turn_on(self, **kwargs):
-        """Turn the switch on with optional duration and last_value."""
-        duration = kwargs.get('duration', 0)
-        last_value = kwargs.get('last_value', 0)
+        """Turn the switch on."""
+        _LOGGER.debug(f"async_turn_on called for {self._key} with arguments: {kwargs}")
+        duration = kwargs.get("duration", 0)
+        last_value = kwargs.get("last_value", 0)
         await self._send_command("ON", duration, last_value)
+        
+        auto_delay = kwargs.get("auto_delay", 0)
+        if auto_delay > 0:
+            self.auto_reset_time = datetime.now() + timedelta(seconds=auto_delay)
+            _LOGGER.debug(f"Auto-reset to AUTO after {auto_delay} seconds for {self._key}")
+            await asyncio.sleep(auto_delay)
+            await self.async_turn_auto()
 
     async def async_turn_off(self, **kwargs):
         """Turn the switch off."""
-        last_value = kwargs.get('last_value', 0)
+        _LOGGER.debug(f"async_turn_off called for {self._key} with arguments: {kwargs}")
+        last_value = kwargs.get("last_value", 0)
         await self._send_command("OFF", 0, last_value)
 
     async def async_turn_auto(self, **kwargs):
-        """Set the switch to auto mode."""
-        auto_delay = kwargs.get('auto_delay', 0)
-        last_value = kwargs.get('last_value', 0)
+        """Set the switch to AUTO mode."""
+        _LOGGER.debug(f"async_turn_auto called for {self._key} with arguments: {kwargs}")
+        auto_delay = kwargs.get("auto_delay", 0)
+        last_value = kwargs.get("last_value", 0)
         await self._send_command("AUTO", auto_delay, last_value)
+        self.auto_reset_time = None
 
     @property
     def icon(self):
@@ -81,7 +120,12 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
         """Return the extra state attributes for the switch."""
         attributes = super().extra_state_attributes or {}
         attributes['status_detail'] = "AUTO" if self.is_auto else "MANUAL"
-        attributes['duration_remaining'] = self.coordinator.data.get(self._key) if not self.is_auto else "N/A"
+        attributes['duration_remaining'] = self._get_switch_state() if not self.is_auto else "N/A"
+        if self.auto_reset_time:
+            remaining_time = (self.auto_reset_time - datetime.now()).total_seconds()
+            attributes['auto_reset_in'] = max(0, remaining_time)
+        else:
+            attributes['auto_reset_in'] = "N/A"
         return attributes
 
     @property
