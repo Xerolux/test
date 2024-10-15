@@ -5,7 +5,7 @@ from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from datetime import timedelta
 import async_timeout
-import aiohttp
+import aiohttp  # Ensure aiohttp is imported for HTTP requests
 import asyncio
 from typing import Any, Dict
 
@@ -22,6 +22,7 @@ from .const import (
     API_READINGS,
     API_SET_FUNCTION_MANUALLY
 )
+
 
 _LOGGER = logging.getLogger(__name__)
 
