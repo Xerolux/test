@@ -29,14 +29,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Violet Pool Controller from a config entry."""
     
     # Retrieve configuration data from the config entry
-    config = {
-        "ip_address": entry.data[CONF_API_URL],
-        "polling_interval": entry.data.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL),
-        "use_ssl": entry.data.get(CONF_USE_SSL, DEFAULT_USE_SSL),
-        "device_id": entry.data.get(CONF_DEVICE_ID, 1),
-        "username": entry.data.get(CONF_USERNAME),
-        "password": entry.data.get(CONF_PASSWORD)
-    }
+    config = await _get_config_from_entry(entry)
 
     # Log configuration data
     _LOGGER.info(f"Setting up Violet Pool Controller with config: {config}")
@@ -67,7 +60,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Register the custom service for 'turn_auto'
     async def handle_turn_auto_service(call):
-        """Handle the custom turn_auto service."""
+        """
+        Handle the custom 'turn_auto' service.
+        
+        Service data:
+        - entity_id (str): The ID of the entity to control.
+        - auto_delay (int): The delay in seconds before AUTO mode is activated (default: 0).
+        - last_value (int): The last value to apply to the switch (default: 0).
+        """
         entity_id = call.data.get("entity_id")
         auto_delay = call.data.get("auto_delay", 0)
         last_value = call.data.get("last_value", 0)
@@ -76,7 +76,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         await coordinator.turn_auto(entity_id, auto_delay, last_value)
 
-    # Register the service
+    # Register the service with Home Assistant
     hass.services.async_register(DOMAIN, "turn_auto", handle_turn_auto_service)
 
     # Forward setup to platforms (e.g., switch, sensor, binary sensor)
@@ -86,6 +86,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     return True
 
+async def _get_config_from_entry(entry: ConfigEntry) -> Dict[str, Any]:
+    """
+    Get the configuration from the entry and handle dynamic updates.
+
+    Returns a dictionary with configuration data.
+    """
+    return {
+        "ip_address": entry.data[CONF_API_URL],
+        "polling_interval": entry.data.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL),
+        "use_ssl": entry.data.get(CONF_USE_SSL, DEFAULT_USE_SSL),
+        "device_id": entry.data.get(CONF_DEVICE_ID, 1),
+        "username": entry.data.get(CONF_USERNAME),
+        "password": entry.data.get(CONF_PASSWORD)
+    }
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
@@ -99,7 +113,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.info(f"Violet Pool Controller (device {entry.entry_id}) unloaded successfully")
     return unload_ok
-
 
 class VioletDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching Violet Pool Controller data."""
