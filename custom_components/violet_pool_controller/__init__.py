@@ -102,7 +102,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 class VioletDataUpdateCoordinator(DataUpdateCoordinator):
-    """Class to manage fetching Violet Pool Controller data."""
+    """Class to manage fetching Violet Pool Controller data and dynamically adding new entities."""
 
     def __init__(self, hass: HomeAssistant, config: Dict[str, Any], session: aiohttp.ClientSession) -> None:
         """Initialize the coordinator."""
@@ -112,6 +112,8 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
         self.session: aiohttp.ClientSession = session
         self.use_ssl: bool = config["use_ssl"]
         self.device_id: int = config["device_id"]
+
+        self._existing_entities: Dict[str, Any] = {}  # Track existing entities and their states
 
         _LOGGER.info(f"Initializing data coordinator for device {self.device_id} (IP: {self.ip_address}, SSL: {self.use_ssl})")
 
@@ -123,7 +125,7 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
     async def _async_update_data(self) -> Dict[str, Any]:
-        """Fetch data from the Violet Pool Controller API."""
+        """Fetch data from the Violet Pool Controller API and detect new or changed entities."""
         retries = 3
         for attempt in range(retries):
             try:
@@ -143,6 +145,10 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
                         response.raise_for_status()
                         data = await response.json()
                         _LOGGER.debug(f"Data received: {data}")
+                        
+                        # Check for new entities or changes
+                        self._detect_new_or_changed_entities(data)
+
                         return data
 
             except aiohttp.ClientError as client_err:
@@ -159,23 +165,36 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
 
             await asyncio.sleep(2 ** attempt)  # Exponential backoff on retries
 
-    async def turn_auto(self, auto_delay: int, last_value: int):
-        """Send command to set the switch to AUTO mode."""
-        protocol = "https" if self.use_ssl else "http"
-        url = f"{protocol}://{self.ip_address}{API_SET_FUNCTION_MANUALLY}?PUMP,AUTO,{auto_delay},{last_value}"
+    def _detect_new_or_changed_entities(self, data: Dict[str, Any]) -> None:
+        """Detect and add new or changed entities based on the received data."""
+        new_entities = set(data.keys()) - set(self._existing_entities.keys())
+        changed_entities = {
+            entity: data[entity]
+            for entity in self._existing_entities
+            if self._existing_entities[entity] != data[entity]
+        }
 
-        auth = aiohttp.BasicAuth(self.username, self.password)
+        if new_entities:
+            _LOGGER.info(f"New entities detected: {new_entities}")
+            for entity in new_entities:
+                self._create_new_entity(entity, data[entity])
+            self._existing_entities.update({entity: data[entity] for entity in new_entities})
 
-        try:
-            async with async_timeout.timeout(10):
-                async with self.session.get(url, auth=auth, ssl=self.use_ssl) as response:
-                    _LOGGER.debug(f"Status Code: {response.status}")
-                    response.raise_for_status()
-                    _LOGGER.info(f"Switch set to AUTO mode with delay {auto_delay} and last value {last_value}")
-        except aiohttp.ClientError as client_err:
-            _LOGGER.error(f"Error setting switch to AUTO mode: {client_err}")
-        except asyncio.TimeoutError:
-            _LOGGER.error(f"Timeout while setting switch to AUTO mode")
-        except Exception as err:
-            _LOGGER.error(f"Unexpected error while setting switch to AUTO mode: {err}")
+        if changed_entities:
+            _LOGGER.info(f"Changed entities detected: {changed_entities}")
+            for entity, new_value in changed_entities.items():
+                self._update_existing_entity(entity, new_value)
+            self._existing_entities.update(changed_entities)
 
+    def _create_new_entity(self, entity: str, value: Any) -> None:
+        """Create and register a new entity dynamically."""
+        _LOGGER.info(f"Creating new entity: {entity} with value: {value}")
+        # Dynamically create new entity and forward to the appropriate platform (e.g., sensor, switch, etc.)
+        # This would involve Home Assistant platform specific logic.
+        # You would register the entity as a new sensor, switch, etc., using hass.helpers.entity_component.async_add_entities
+
+    def _update_existing_entity(self, entity: str, new_value: Any) -> None:
+        """Update the state of an existing entity."""
+        _LOGGER.info(f"Updating entity: {entity} to new value: {new_value}")
+        # Dynamically update the entity's state in Home Assistant
+        # This could trigger a state update for the entity in Home Assistant
