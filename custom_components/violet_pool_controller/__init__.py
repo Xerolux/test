@@ -65,19 +65,51 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
-    # Register the custom service for 'turn_auto'
+    # Register custom services for turning switches on/off/auto
     async def handle_turn_auto_service(call):
         """Handle the custom turn_auto service."""
         entity_id = call.data.get("entity_id")
-        auto_delay = call.data.get("auto_delay", 0)
+        duration = call.data.get("duration", 0)
         last_value = call.data.get("last_value", 0)
 
-        _LOGGER.info(f"Setting {entity_id} to AUTO mode with delay {auto_delay} seconds and last value {last_value}")
+        _LOGGER.info(f"Setting {entity_id} to AUTO mode with duration {duration} seconds and last value {last_value}")
 
-        await coordinator.turn_auto(auto_delay, last_value)
+        entity = hass.states.get(entity_id)
+        if entity:
+            await entity.async_turn_auto(duration=duration, last_value=last_value)
+        else:
+            _LOGGER.error(f"Entity {entity_id} not found")
 
-    # Register the service
+    async def handle_turn_on_service(call):
+        """Handle the custom turn_on service."""
+        entity_id = call.data.get("entity_id")
+        duration = call.data.get("duration", 0)
+        last_value = call.data.get("last_value", 0)
+
+        _LOGGER.info(f"Turning {entity_id} ON with duration {duration} seconds and last value {last_value}")
+
+        entity = hass.states.get(entity_id)
+        if entity:
+            await entity.async_turn_on(duration=duration, last_value=last_value)
+        else:
+            _LOGGER.error(f"Entity {entity_id} not found")
+
+    async def handle_turn_off_service(call):
+        """Handle the custom turn_off service."""
+        entity_id = call.data.get("entity_id")
+
+        _LOGGER.info(f"Turning {entity_id} OFF")
+
+        entity = hass.states.get(entity_id)
+        if entity:
+            await entity.async_turn_off()
+        else:
+            _LOGGER.error(f"Entity {entity_id} not found")
+
+    # Register the services
     hass.services.async_register(DOMAIN, "turn_auto", handle_turn_auto_service)
+    hass.services.async_register(DOMAIN, "turn_on", handle_turn_on_service)
+    hass.services.async_register(DOMAIN, "turn_off", handle_turn_off_service)
 
     # Forward setup to platforms (e.g., switch, sensor, binary sensor)
     await hass.config_entries.async_forward_entry_setups(entry, ["switch", "sensor", "binary_sensor"])
@@ -198,3 +230,4 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
         _LOGGER.info(f"Updating entity: {entity} to new value: {new_value}")
         # Dynamically update the entity's state in Home Assistant
         # This could trigger a state update for the entity in Home Assistant
+
