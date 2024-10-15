@@ -150,6 +150,6 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     async_add_entities(switches)
 
 SWITCHES = [
-    {"name": "Pump Switch", "key": "PUMP", "icon": "mdi:water-pump"},
-    {"name": "Light Switch", "key": "LIGHT", "icon": "mdi:lightbulb"},
+    {"name": "Violet Pump Switch", "key": "PUMP", "icon": "mdi:water-pump"},
+    {"name": "Violet Light Switch", "key": "LIGHT", "icon": "mdi:lightbulb"},
 ]
