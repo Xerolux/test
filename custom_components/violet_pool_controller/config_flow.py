@@ -5,7 +5,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import aiohttp_client
-import re  # Für die Validierung der Firmware-Version
+import re  # For firmware version validation
 from .const import (
     DOMAIN,
     CONF_API_URL,
@@ -20,45 +20,47 @@ from .const import (
     API_READINGS,  # API endpoint
 )
 
-# Timeout-Limits als Konstanten definieren
+# Timeout limits as constants
 MIN_TIMEOUT_DURATION = 5
 MAX_TIMEOUT_DURATION = 60
 
 _LOGGER = logging.getLogger(__name__)
 
-# Validierung der Firmware-Version
+# Validate firmware version format
 def is_valid_firmware(firmware_version):
-    """Validiere, ob die Firmware-Version im richtigen Format vorliegt (z.B. 1.1.4)."""
+    """Validate firmware version format (e.g., 1.1.4)."""
     return bool(re.match(r'^[1-9]\d*\.\d+\.\d+$', firmware_version))
 
 async def fetch_api_data(session, api_url, auth, use_ssl, timeout_duration, retry_attempts):
-    """Fetch data from the API with retry logic."""
+    """Fetch data from the API with retry logic and timeout."""
     for attempt in range(retry_attempts):
         try:
             async with async_timeout.timeout(timeout_duration):
                 _LOGGER.debug(
-                    "Versuche, eine Verbindung zur API bei %s herzustellen (SSL=%s)",
+                    "Attempting connection to API at %s (SSL=%s)",
                     api_url,
                     use_ssl,
                 )
                 async with session.get(api_url, auth=auth, ssl=use_ssl) as response:
                     response.raise_for_status()
                     data = await response.json()
-                    _LOGGER.debug("API-Antwort empfangen: %s", data)
+                    _LOGGER.debug("API response received: %s", data)
                     return data
         except aiohttp.ClientConnectionError as err:
-            _LOGGER.error("Verbindungsfehler zur API bei %s: %s", api_url, err)
+            _LOGGER.error("Connection error to API at %s: %s", api_url, err)
             if attempt + 1 == retry_attempts:
-                raise ValueError("Verbindungsfehler nach mehreren Versuchen.")
+                raise ValueError("Connection error after multiple attempts.")
         except aiohttp.ClientResponseError as err:
-            _LOGGER.error("Fehlerhafte API-Antwort erhalten (Statuscode: %s): %s", err.status, err.message)
-            raise ValueError("Fehlerhafte API-Antwort.")
+            _LOGGER.error(
+                "Invalid API response (Status code: %s, Message: %s)", err.status, err.message
+            )
+            raise ValueError("Invalid API response.")
         except asyncio.TimeoutError:
-            _LOGGER.error("Zeitüberschreitung bei der API-Anfrage.")
-            raise ValueError("Zeitüberschreitung bei der API-Anfrage.")
+            _LOGGER.error("API request timed out at %s", api_url)
+            raise ValueError("API request timed out.")
         except Exception as err:
-            _LOGGER.error("Unerwartete Ausnahme: %s", err)
-            raise ValueError("Unerwartete Ausnahme.")
+            _LOGGER.error("Unexpected exception occurred: %s", err)
+            raise ValueError("Unexpected error occurred.")
 
 class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Violet Pool Controller."""
@@ -66,7 +68,7 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
-        """Handle the initial step."""
+        """Handle the initial user input step."""
         errors = {}
 
         if user_input is not None:
@@ -74,7 +76,7 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             use_ssl = user_input.get(CONF_USE_SSL, DEFAULT_USE_SSL)
             protocol = "https" if use_ssl else "http"
 
-            # Dynamisch erstellte vollständige API-URL
+            # Dynamically construct the full API URL
             api_url = f"{protocol}://{base_ip}{API_READINGS}"
             _LOGGER.debug("Constructed API URL: %s", api_url)
 
@@ -83,42 +85,50 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             password = user_input.get(CONF_PASSWORD)
             device_id = user_input.get(CONF_DEVICE_ID, 1)
 
+            # Mask sensitive info in logs
+            masked_username = username[:1] + '*' * (len(username) - 2) + username[-1:]
+            masked_password = '*' * len(password)
+            _LOGGER.debug(f"Username: {masked_username}, Password: {masked_password}")
+
             await self.async_set_unique_id(base_ip)  # Use the base IP as the unique ID
             self._abort_if_unique_id_configured()
 
             session = aiohttp_client.async_get_clientsession(self.hass)
 
-            # Timeout-Dauer dynamisch anpassen
+            # Adjust timeout duration dynamically
             timeout_duration = user_input.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
             timeout_duration = max(MIN_TIMEOUT_DURATION, min(timeout_duration, MAX_TIMEOUT_DURATION))
 
-            retry_attempts = 3  # Wiederholungsversuche bei Verbindungsfehlern
+            retry_attempts = 3  # Retry attempts for connection errors
             auth = aiohttp.BasicAuth(username, password)
 
             try:
+                # Fetch the API data
                 data = await fetch_api_data(session, api_url, auth, use_ssl, timeout_duration, retry_attempts)
-
+                
+                # Process the firmware version and validate
                 await self._process_firmware_data(data, errors)
 
             except ValueError as err:
                 _LOGGER.error("%s", err)
+                errors["base"] = "api_error"  # Display a friendly error message in the form
 
             if not errors:
-                # Nur die IP-Adresse speichern, um unnötige Daten zu vermeiden
+                # Only store the base IP address to avoid saving unnecessary data
                 user_input[CONF_API_URL] = base_ip
                 user_input[CONF_DEVICE_NAME] = device_name
                 user_input[CONF_USERNAME] = username
                 user_input[CONF_PASSWORD] = password
                 user_input[CONF_DEVICE_ID] = device_id
 
-                # Erfolgreiche Konfiguration
+                # Configuration success
                 return self.async_create_entry(
                     title=f"{device_name} (ID {device_id})", data=user_input
                 )
 
-        # Formular für den Benutzer anzeigen
+        # Display the form to the user with error handling
         data_schema = vol.Schema({
-            vol.Required(CONF_API_URL): str,  # Nur die IP-Adresse wird eingegeben
+            vol.Required(CONF_API_URL): str,  # Only the IP address is entered
             vol.Required(CONF_USERNAME): str,
             vol.Required(CONF_PASSWORD): str,
             vol.Optional(CONF_POLLING_INTERVAL, default=DEFAULT_POLLING_INTERVAL): vol.All(vol.Coerce(int), vol.Range(min=5, max=3600)),
@@ -134,31 +144,30 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def _process_firmware_data(self, data, errors):
-        """Process firmware data and validate."""
-        # Firmware-Version aus 'fw' oder 'SW_VERSION' auslesen
+        """Process and validate the firmware data."""
         firmware_version = data.get('fw') or data.get('SW_VERSION')
 
-        # Zusätzlich die Daten von 'SW_VERSION_CARRIER', 'HW_VERSION_CARRIER', 'HW_SERIAL_CARRIER' auslesen
+        # Additional carrier information extraction
         sw_version_carrier = data.get('SW_VERSION_CARRIER')
         hw_version_carrier = data.get('HW_VERSION_CARRIER')
         hw_serial_carrier = data.get('HW_SERIAL_CARRIER')
 
         if not firmware_version:
-            _LOGGER.error("Firmware-Version in der API-Antwort nicht gefunden: %s", data)
+            _LOGGER.error("Firmware version not found in API response: %s", data)
             errors["base"] = "firmware_not_found"
-            raise ValueError("Firmware-Version nicht gefunden.")
+            raise ValueError("Firmware version not found.")
         else:
-            # Optional: Validierung des Firmware-Formats
+            # Optional firmware format validation
             if is_valid_firmware(firmware_version):
-                _LOGGER.info("Firmware-Version erfolgreich ausgelesen: %s", firmware_version)
+                _LOGGER.info("Successfully read firmware version: %s", firmware_version)
             else:
-                _LOGGER.error("Ungültige Firmware-Version erhalten: %s", firmware_version)
+                _LOGGER.error("Invalid firmware version received: %s", firmware_version)
                 errors["base"] = "invalid_firmware"
 
-        # Zusätzliche Informationen zu SW_VERSION_CARRIER, HW_VERSION_CARRIER und HW_SERIAL_CARRIER anzeigen
-        _LOGGER.info("Carrier Software-Version (SW_VERSION_CARRIER): %s", sw_version_carrier or "Nicht verfügbar")
-        _LOGGER.info("Carrier Hardware-Version (HW_VERSION_CARRIER): %s", hw_version_carrier or "Nicht verfügbar")
-        _LOGGER.info("Carrier Hardware-Seriennummer (HW_SERIAL_CARRIER): %s", hw_serial_carrier or "Nicht verfügbar")
+        # Log additional carrier information
+        _LOGGER.info("Carrier Software Version (SW_VERSION_CARRIER): %s", sw_version_carrier or "Not available")
+        _LOGGER.info("Carrier Hardware Version (HW_VERSION_CARRIER): %s", hw_version_carrier or "Not available")
+        _LOGGER.info("Carrier Hardware Serial (HW_SERIAL_CARRIER): %s", hw_serial_carrier or "Not available")
 
     @staticmethod
     @callback
@@ -170,7 +179,7 @@ class VioletOptionsFlow(config_entries.OptionsFlow):
     """Handle options flow for Violet Device."""
 
     def __init__(self, config_entry):
-        """Initialize options flow."""
+        """Initialize the options flow."""
         self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
