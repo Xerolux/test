@@ -8,6 +8,7 @@ import async_timeout
 import voluptuous as vol
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers import config_validation as cv
+from homeassistant.components.persistent_notification import create as persistent_notification_create
 
 from .const import (
     DOMAIN, 
@@ -22,7 +23,6 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
         self._key = key
         self._icon = icon
         self._attr_name = name
-        # Updated unique ID to follow the new naming convention
         self._attr_unique_id = f"{DOMAIN}.violet.{self._key.lower()}"
         self.ip_address = coordinator.ip_address
         self.username = coordinator.username
@@ -49,13 +49,19 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
         return self._get_switch_state() == 0
 
     async def _send_command(self, action, duration=0, last_value=0):
-        """Sends the control command to the API and handles retries."""
+        """Sends the control command to the API and handles retries with exponential backoff."""
         url = f"http://{self.ip_address}{API_SET_FUNCTION_MANUALLY}?{self._key},{action},{duration},{last_value}"
         auth = aiohttp.BasicAuth(self.username, self.password)
 
         retry_attempts = 3
         for attempt in range(retry_attempts):
             try:
+                # Implement exponential backoff (wait: 2, 4, 8 seconds)
+                if attempt > 0:
+                    wait_time = 2 ** attempt
+                    _LOGGER.debug(f"Waiting {wait_time} seconds before retrying...")
+                    await asyncio.sleep(wait_time)
+
                 async with async_timeout.timeout(self.timeout):
                     async with self.session.get(url, auth=auth) as response:
                         response.raise_for_status()
@@ -75,6 +81,9 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
                 _LOGGER.error(f"Timeout sending {action} command to {self._key}, attempt {attempt + 1} of {retry_attempts}")
             except Exception as err:
                 _LOGGER.error(f"Unexpected error when sending {action} command to {self._key}: {err}")
+
+        # If the command fails after all retry attempts, send a notification to the user
+        self._notify_user_of_failure(action, duration, last_value)
 
     async def async_turn_on(self, **kwargs):
         """Turn the switch on."""
@@ -143,6 +152,14 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
             "sw_version": self.coordinator.data.get('fw') or self.coordinator.data.get('SW_VERSION', 'Unknown'),
         }
 
+    def _notify_user_of_failure(self, action, duration, last_value):
+        """Send a notification to the user in case of repeated command failures."""
+        message = (f"Failed to send {action} command to {self._key} after multiple attempts.\n"
+                   f"Duration: {duration}, Last Value: {last_value}")
+        title = f"{self._key} Command Failure"
+        persistent_notification_create(self.hass, message, title)
+        _LOGGER.warning(f"Sent notification to user: {message}")
+
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up the Violet switches based on config entry."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
@@ -187,3 +204,4 @@ SWITCHES = [
     {"name": "Violet Pump", "key": "PUMP", "icon": "mdi:water-pump"},
     {"name": "Violet Light", "key": "LIGHT", "icon": "mdi:lightbulb"},
 ]
+
