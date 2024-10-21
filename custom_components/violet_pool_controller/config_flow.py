@@ -5,8 +5,6 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import aiohttp_client
-from homeassistant.helpers.typing import ConfigType, HomeAssistantType
-from homeassistant.components.mqtt import async_publish
 import re  # For firmware version validation
 from .const import (
     DOMAIN,
@@ -33,7 +31,6 @@ from .const import (
 # Timeout limits as constants
 MIN_TIMEOUT_DURATION = 5
 MAX_TIMEOUT_DURATION = 60
-CACHE_DURATION = 30  # Cache API results for 30 seconds
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,13 +39,8 @@ def is_valid_firmware(firmware_version):
     """Validate firmware version format (e.g., 1.1.4)."""
     return bool(re.match(r'^[1-9]\d*\.\d+\.\d+$', firmware_version))
 
-async def fetch_api_data(session, api_url, auth, use_ssl, timeout_duration, retry_attempts, cache):
-    """Fetch data from the API with retry logic, caching, and timeout."""
-    # Check if cached data is still valid
-    if "timestamp" in cache and (cache["timestamp"] + timedelta(seconds=CACHE_DURATION)) > datetime.utcnow():
-        _LOGGER.debug("Returning cached data")
-        return cache["data"]
-
+async def fetch_api_data(session, api_url, auth, use_ssl, timeout_duration, retry_attempts):
+    """Fetch data from the API with retry logic and timeout."""
     for attempt in range(retry_attempts):
         try:
             async with async_timeout.timeout(timeout_duration):
@@ -61,11 +53,6 @@ async def fetch_api_data(session, api_url, auth, use_ssl, timeout_duration, retr
                     response.raise_for_status()
                     data = await response.json()
                     _LOGGER.debug("API response received: %s", data)
-                    
-                    # Cache the data
-                    cache["data"] = data
-                    cache["timestamp"] = datetime.utcnow()
-                    
                     return data
         except aiohttp.ClientConnectionError as err:
             _LOGGER.error("Connection error to API at %s: %s", api_url, err)
@@ -124,9 +111,8 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             auth = aiohttp.BasicAuth(username, password)
 
             try:
-                cache = {}  # Initialize cache for API results
-                # Fetch the API data
-                data = await fetch_api_data(session, api_url, auth, use_ssl, timeout_duration, retry_attempts, cache)
+                # Fetch the API data for validation
+                data = await fetch_api_data(session, api_url, auth, use_ssl, timeout_duration, retry_attempts)
                 
                 # Process the firmware version and validate
                 await self._process_firmware_data(data, errors)
@@ -266,26 +252,3 @@ class VioletOptionsFlow(config_entries.OptionsFlow):
             step_id="user",
             data_schema=options_schema
         )
-
-# Example of MQTT publishing function (if MQTT is enabled)
-async def publish_mqtt_message(hass: HomeAssistantType, topic: str, payload: str):
-    """Publish a message to the MQTT broker."""
-    if hass.data[DOMAIN].get(CONF_MQTT_ENABLED, False):
-        mqtt_broker = hass.data[DOMAIN].get(CONF_MQTT_BROKER)
-        mqtt_port = hass.data[DOMAIN].get(CONF_MQTT_PORT)
-        mqtt_username = hass.data[DOMAIN].get(CONF_MQTT_USERNAME)
-        mqtt_password = hass.data[DOMAIN].get(CONF_MQTT_PASSWORD)
-        mqtt_base_topic = hass.data[DOMAIN].get(CONF_MQTT_BASE_TOPIC)
-
-        full_topic = f"{mqtt_base_topic}/{topic}"
-
-        # Publish to MQTT
-        async_publish(
-            hass,
-            topic=full_topic,
-            payload=payload,
-            qos=0,
-            retain=False
-        )
-        _LOGGER.info(f"Published message to MQTT topic {full_topic}: {payload}")
-
