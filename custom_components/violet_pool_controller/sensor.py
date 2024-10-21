@@ -56,7 +56,7 @@ class VioletDeviceSensor(CoordinatorEntity, SensorEntity):
         """Return the unit of measurement."""
         unit = self._get_unit_for_key(self._key)
         if unit is None:
-            _LOGGER.warning(f"No unit found for sensor {self._key}.")
+            _LOGGER.debug(f"No unit required for sensor {self._key}.")
         return unit
 
     def _get_sensor_state(self):
@@ -132,6 +132,20 @@ class VioletDeviceSensor(CoordinatorEntity, SensorEntity):
             "CHLORINE_LEVEL": "ppm",
             "BROMINE_LEVEL": "ppm",
         }
+       # Return None for sensors that are timestamps or statuses
+        no_unit_sensors = [
+            "SOLAR_LAST_OFF",
+            "HEATER_LAST_ON",
+            "HEATER_LAST_OFF",
+            "BACKWASH_LAST_ON",
+            "BACKWASH_LAST_OFF",
+            "PUMP_LAST_ON",
+            "PUMP_LAST_OFF",
+        ]
+
+        if key in no_unit_sensors:
+            return None
+
         return units.get(key, None)
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
@@ -164,7 +178,7 @@ SENSORS = [
     {"name": "Load Average", "key": "LOAD_AVG", "icon": "mdi:chart-line"},
     
     # Software Version
-    {"name": "Software Violet Application", "key": "SW_VERSEION", "icon": "mdi:update"},
+    {"name": "Software Violet Application", "key": "SW_VERSION", "icon": "mdi:update"},
     {"name": "Firmware Violet Carrier", "key": "SW_VERSION_CARRIER", "icon": "mdi:update"},
 
     # OneWire Sensors (Temperature, Min/Max Values)
