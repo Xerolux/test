@@ -15,16 +15,8 @@ from .const import (
     CONF_USERNAME,
     CONF_PASSWORD,
     CONF_DEVICE_ID,
-    CONF_MQTT_ENABLED,
-    CONF_MQTT_BROKER,
-    CONF_MQTT_PORT,
-    CONF_MQTT_USERNAME,
-    CONF_MQTT_PASSWORD,
-    CONF_MQTT_BASE_TOPIC,
     DEFAULT_POLLING_INTERVAL,
     DEFAULT_USE_SSL,
-    DEFAULT_MQTT_PORT,
-    DEFAULT_MQTT_ENABLED,
     API_READINGS,  # API endpoint
 )
 
@@ -111,7 +103,7 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             auth = aiohttp.BasicAuth(username, password)
 
             try:
-                # Fetch the API data for validation
+                # Fetch the API data
                 data = await fetch_api_data(session, api_url, auth, use_ssl, timeout_duration, retry_attempts)
                 
                 # Process the firmware version and validate
@@ -134,7 +126,7 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     title=f"{device_name} (ID {device_id})", data=user_input
                 )
 
-        # Display the form to the user with error handling and MQTT options
+        # Display the form to the user with error handling
         data_schema = vol.Schema({
             vol.Required(CONF_API_URL): str,  # Only the IP address is entered
             vol.Required(CONF_USERNAME): str,
@@ -143,12 +135,6 @@ class VioletDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Optional(CONF_USE_SSL, default=DEFAULT_USE_SSL): bool,
             vol.Optional(CONF_DEVICE_NAME, default="Violet Pool Controller"): str,
             vol.Required(CONF_DEVICE_ID, default=1): vol.All(vol.Coerce(int), vol.Range(min=1)),
-            vol.Optional(CONF_MQTT_ENABLED, default=DEFAULT_MQTT_ENABLED): bool,
-            vol.Optional(CONF_MQTT_BROKER, default=""): str,
-            vol.Optional(CONF_MQTT_PORT, default=DEFAULT_MQTT_PORT): vol.Coerce(int),
-            vol.Optional(CONF_MQTT_USERNAME, default=""): str,
-            vol.Optional(CONF_MQTT_PASSWORD, default=""): str,
-            vol.Optional(CONF_MQTT_BASE_TOPIC, default="violet_pool_controller"): str,
         })
 
         return self.async_show_form(
@@ -222,30 +208,6 @@ class VioletOptionsFlow(config_entries.OptionsFlow):
                 CONF_USE_SSL,
                 default=self.config_entry.data.get(CONF_USE_SSL, DEFAULT_USE_SSL)
             ): bool,
-            vol.Optional(
-                CONF_MQTT_ENABLED,
-                default=self.config_entry.data.get(CONF_MQTT_ENABLED, DEFAULT_MQTT_ENABLED)
-            ): bool,
-            vol.Optional(
-                CONF_MQTT_BROKER,
-                default=self.config_entry.data.get(CONF_MQTT_BROKER, "")
-            ): str,
-            vol.Optional(
-                CONF_MQTT_PORT,
-                default=self.config_entry.data.get(CONF_MQTT_PORT, DEFAULT_MQTT_PORT)
-            ): vol.Coerce(int),
-            vol.Optional(
-                CONF_MQTT_USERNAME,
-                default=self.config_entry.data.get(CONF_MQTT_USERNAME, "")
-            ): str,
-            vol.Optional(
-                CONF_MQTT_PASSWORD,
-                default=self.config_entry.data.get(CONF_MQTT_PASSWORD, "")
-            ): str,
-            vol.Optional(
-                CONF_MQTT_BASE_TOPIC,
-                default=self.config_entry.data.get(CONF_MQTT_BASE_TOPIC, "violet_pool_controller")
-            ): str,
         })
 
         return self.async_show_form(
