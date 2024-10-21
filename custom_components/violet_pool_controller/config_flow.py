@@ -1,9 +1,9 @@
 import logging
+from homeassistant.core import HomeAssistant  # Verwende den korrekten Typ 'HomeAssistant'
 import aiohttp
 import async_timeout
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant  # Verwende den aktuellen Typ 'HomeAssistant'
 from homeassistant.helpers import aiohttp_client
 from datetime import datetime, timedelta  # Importiere datetime und timedelta
 import asyncio  # Importiere asyncio
@@ -258,7 +258,7 @@ class VioletOptionsFlow(config_entries.OptionsFlow):
             ): str,
             vol.Optional(
                 CONF_MQTT_BASE_TOPIC,
-                default=self.config_entry.data.get(CONF_MQTT_BASE_TOPIC, "violet_pool_controller")
+                default="violet_pool_controller"
             ): str,
         })
 
