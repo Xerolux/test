@@ -115,9 +115,9 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
                         data = await response.json()
                         _LOGGER.debug(f"Data received: {data}")
                         
-                        # Validate response before processing
-                        if not isinstance(data, dict) or "status" not in data:
-                            raise UpdateFailed(f"Invalid response structure: {data}")
+                        # Validate response structure - Ensure at least one key is present, e.g., 'IMP1_value'
+                        if not isinstance(data, dict) or "IMP1_value" not in data:
+                            raise UpdateFailed(f"Unexpected response structure: {data}")
                         
                         # Check for new entities or changes
                         self._detect_new_or_changed_entities(data)
