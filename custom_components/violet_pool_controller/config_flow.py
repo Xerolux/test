@@ -1,13 +1,13 @@
 import logging
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant  # Verwende den korrekten Typ 'HomeAssistant'
 import aiohttp
 import async_timeout
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers import aiohttp_client
-from datetime import datetime, timedelta
-import asyncio
-import re
+from datetime import datetime, timedelta  # Importiere datetime und timedelta
+import asyncio  # Importiere asyncio
+import re  # Für die Validierung der Firmware-Version
 from .const import (
     DOMAIN,
     CONF_API_URL,
@@ -27,7 +27,7 @@ from .const import (
     DEFAULT_USE_SSL,
     DEFAULT_MQTT_PORT,
     DEFAULT_MQTT_ENABLED,
-    API_READINGS,
+    API_READINGS,  # API endpoint
 )
 
 # Timeout limits as constants
