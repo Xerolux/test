@@ -1,5 +1,5 @@
 import logging
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant, callback  # Sicherstellen, dass 'callback' importiert ist
 import aiohttp
 import async_timeout
 import voluptuous as vol
