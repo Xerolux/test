@@ -9,42 +9,21 @@ class VioletDeviceSensor(CoordinatorEntity, SensorEntity):
     """Representation of a Violet Device Sensor."""
 
     def __init__(self, coordinator, key, icon, config_entry):
-        """Initialize the sensor entity."""
         super().__init__(coordinator)
         self._key = key
         self._icon = icon
         self._config_entry = config_entry  # Store config_entry
         self._attr_name = f"Violet {self._key}"
         self._attr_unique_id = f"{DOMAIN}_{self._key}"
-        self._state = None  # Initialize the state
 
     def _get_sensor_state(self):
         """Helper method to retrieve the current sensor state from the coordinator."""
-        try:
-            value = self.coordinator.data.get(self._key)
-            if value is None:
-                _LOGGER.warning(f"Key '{self._key}' not found in the coordinator data.")
-                return None
-            return value
-        except KeyError:
-            _LOGGER.error(f"Key {self._key} is missing in the coordinator data.")
-            return None
-
-    def _validate_state(self, value):
-        """Validate the state value."""
-        if isinstance(value, (int, float)):
-            return value
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            _LOGGER.error(f"Invalid value for {self._key}: {value}")
-            return None
+        return self.coordinator.data.get(self._key)
 
     @property
     def state(self):
-        """Return the validated state of the sensor."""
-        value = self._get_sensor_state()
-        return self._validate_state(value)
+        """Return the state of the sensor."""
+        return self._get_sensor_state()
 
     @property
     def icon(self):
@@ -146,8 +125,7 @@ class VioletDeviceSensor(CoordinatorEntity, SensorEntity):
             "CHLORINE_LEVEL": "ppm",
             "BROMINE_LEVEL": "ppm",
         }
-        return units.get(key, None)
-
+        return units.get(self._key, None)
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up Violet Device sensors from a config entry."""
