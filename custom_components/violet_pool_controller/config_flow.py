@@ -6,7 +6,6 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers.typing import ConfigType, HomeAssistantType
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.components.mqtt import async_publish
 import re  # For firmware version validation
 from .const import (
