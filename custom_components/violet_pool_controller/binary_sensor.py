@@ -16,7 +16,6 @@ class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_name = f"Violet {self._key}"
         self._attr_unique_id = f"{DOMAIN}_{self._key}"
         self._attr_is_on = self._get_sensor_state() == 1
-        self._attr_icon = self._icon if self._attr_is_on else f"{self._icon}-off"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, "violet_pool_controller")},
             "name": "Violet Pool Controller",
@@ -26,14 +25,27 @@ class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
             "configuration_url": f"http://{self._config_entry.data.get(CONF_API_URL, 'Unknown IP')}",
         }
 
-    def _get_sensor_state(self):
-        """Helper method to retrieve the current sensor state from the coordinator."""
-        return self.coordinator.data.get(self._key)
+    @property
+    def is_on(self):
+        """Return true if the binary sensor is on."""
+        state = self._get_sensor_state()
+        if state is None:
+            _LOGGER.warning(f"Sensor {self._key} returned None as its state.")
+        return state == 1
+
+    @property
+    def icon(self):
+        """Return the icon of the sensor, depending on the state."""
+        return self._icon if self.is_on else f"{self._icon}-off"
 
     @property
     def unit_of_measurement(self):
         """Return the unit of measurement, if applicable."""
         return self._get_unit_for_key(self._key)
+
+    def _get_sensor_state(self):
+        """Helper method to retrieve the current sensor state from the coordinator."""
+        return self.coordinator.data.get(self._key)
 
     def _get_unit_for_key(self, key):
         """Helper method to retrieve the unit of measurement based on the sensor key."""
@@ -114,3 +126,4 @@ BINARY_SENSORS = [
     {"name": "Refill State", "key": "REFILL_STATE", "icon": "mdi:water-boiler"},
     {"name": "Light State", "key": "LIGHT_STATE", "icon": "mdi:lightbulb"},
 ]
+

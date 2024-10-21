@@ -15,15 +15,15 @@ class VioletDeviceSensor(CoordinatorEntity, SensorEntity):
         self._config_entry = config_entry  # Store config_entry
         self._attr_name = f"Violet {self._key}"
         self._attr_unique_id = f"{DOMAIN}_{self._key}"
-
-    def _get_sensor_state(self):
-        """Helper method to retrieve the current sensor state from the coordinator."""
-        return self.coordinator.data.get(self._key)
+        self._state = None  # Cache the sensor state
 
     @property
     def state(self):
         """Return the state of the sensor."""
-        return self._get_sensor_state()
+        self._state = self._get_sensor_state()
+        if self._state is None:
+            _LOGGER.warning(f"Sensor {self._key} returned None as its state.")
+        return self._state
 
     @property
     def icon(self):
@@ -32,7 +32,7 @@ class VioletDeviceSensor(CoordinatorEntity, SensorEntity):
             return "mdi:power" if self.state else "mdi:power-off"
         if self._key.startswith("onewire"):
             return "mdi:thermometer" if self.state else "mdi:thermometer-off"
-        return self._icon  # Default icon
+        return self._icon  # Default icon if no special handling is needed
 
     @property
     def available(self):
@@ -47,14 +47,21 @@ class VioletDeviceSensor(CoordinatorEntity, SensorEntity):
             "name": "Violet Pool Controller",
             "manufacturer": "PoolDigital GmbH & Co. KG",
             "model": "Violet Model X",
-            "sw_version": self.coordinator.data.get('fw') or self.coordinator.data.get('SW_VERSION', 'Unbekannt'),
+            "sw_version": self.coordinator.data.get('fw') or self.coordinator.data.get('SW_VERSION', 'Unknown'),
             "configuration_url": f"http://{self._config_entry.data.get('host', 'Unknown IP')}/getReadings?ALL",
         }
 
     @property
     def unit_of_measurement(self):
         """Return the unit of measurement."""
-        return self._get_unit_for_key(self._key)
+        unit = self._get_unit_for_key(self._key)
+        if unit is None:
+            _LOGGER.warning(f"No unit found for sensor {self._key}.")
+        return unit
+
+    def _get_sensor_state(self):
+        """Helper method to retrieve the current sensor state from the coordinator."""
+        return self.coordinator.data.get(self._key)
 
     def _get_unit_for_key(self, key):
         """Helper method to retrieve the unit of measurement based on the sensor key."""
@@ -125,7 +132,7 @@ class VioletDeviceSensor(CoordinatorEntity, SensorEntity):
             "CHLORINE_LEVEL": "ppm",
             "BROMINE_LEVEL": "ppm",
         }
-        return units.get(self._key, None)
+        return units.get(key, None)
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up Violet Device sensors from a config entry."""
