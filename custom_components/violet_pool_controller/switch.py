@@ -13,6 +13,17 @@ from .const import DOMAIN, API_SET_FUNCTION_MANUALLY
 
 _LOGGER = logging.getLogger(__name__)
 
+# Map the API numeric values to ON (True) or OFF (False) states
+STATE_MAP = {
+    0: False,  # AUTO (not on)
+    1: True,   # AUTO (on)
+    2: False,  # OFF by control rule
+    3: True,   # ON by emergency rule
+    4: True,   # MANUAL ON
+    5: False,  # OFF by emergency rule
+    6: False,  # MANUAL OFF
+}
+
 class VioletSwitch(CoordinatorEntity, SwitchEntity):
     def __init__(self, coordinator, key, name, icon):
         super().__init__(coordinator)
@@ -39,10 +50,12 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def is_on(self):
-        return self._get_switch_state() in (1, 4)
+        """Determine if the switch is on based on the API state mapped through STATE_MAP."""
+        return STATE_MAP.get(self._get_switch_state(), False)
 
     @property
     def is_auto(self):
+        """Check if the switch is in AUTO mode."""
         return self._get_switch_state() == 0
 
     async def _send_command(self, action, duration=0, last_value=0):

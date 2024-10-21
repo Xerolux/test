@@ -5,6 +5,17 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+# Map the API numeric values to ON (True) or OFF (False) states
+STATE_MAP = {
+    0: False,  # AUTO (not on)
+    1: True,   # AUTO (on)
+    2: False,  # OFF by control rule
+    3: True,   # ON by emergency rule
+    4: True,   # MANUAL ON
+    5: False,  # OFF by emergency rule
+    6: False,  # MANUAL OFF
+}
+
 class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
     """Representation of a Violet Device Binary Sensor."""
 
@@ -26,7 +37,7 @@ class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._has_logged_none_state = False  # To avoid repeated logs
 
     def _get_sensor_state(self):
-        """Helper method to retrieve the current sensor state from the coordinator."""
+        """Helper method to retrieve and map the current sensor state from the API."""
         state = self.coordinator.data.get(self._key, None)
         
         if state is None:
@@ -34,9 +45,9 @@ class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
                 _LOGGER.warning(f"Sensor {self._key} returned None as its state. Defaulting to 'OFF'.")
                 self._has_logged_none_state = True  # Log once
             return False  # Default to OFF when state is None
-        else:
-            self._has_logged_none_state = False  # Reset log flag if state is valid
-            return state == 1
+        
+        # Map the numeric state to True (ON) or False (OFF) using STATE_MAP
+        return STATE_MAP.get(state, False)
 
     @property
     def is_on(self):
@@ -52,9 +63,6 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up Violet Device binary sensors from a config entry."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
 
-    # Log the retrieved data for debugging purposes
-    _LOGGER.debug(f"Violet Pool Controller API data: {coordinator.data}")
-
     # Initialize sensors from the BINARY_SENSORS list
     binary_sensors = [
         VioletBinarySensor(coordinator, sensor["key"], sensor["icon"], config_entry)
@@ -63,9 +71,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     async_add_entities(binary_sensors)
 
 BINARY_SENSORS = [
-    {"name": "Pump State", "key": "PUMP_STATE", "icon": "mdi:water-pump"},
-    {"name": "Solar State", "key": "SOLAR_STATE", "icon": "mdi:solar-power"},
-    {"name": "Heater State", "key": "HEATER_STATE", "icon": "mdi:radiator"},
-    {"name": "Light State", "key": "LIGHT_STATE", "icon": "mdi:lightbulb"},
+    {"name": "Pump State", "key": "PUMP", "icon": "mdi:water-pump"},
+    {"name": "Solar State", "key": "SOLAR", "icon": "mdi:solar-power"},
+    {"name": "Heater State", "key": "HEATER", "icon": "mdi:radiator"},
+    {"name": "Light State", "key": "LIGHT", "icon": "mdi:lightbulb"},
 ]
 

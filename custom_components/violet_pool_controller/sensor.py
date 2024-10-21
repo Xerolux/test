@@ -5,6 +5,17 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+# List of sensors that should not have a unit of measurement
+NO_UNIT_SENSORS = [
+    "SOLAR_LAST_OFF",
+    "HEATER_LAST_ON",
+    "HEATER_LAST_OFF",
+    "BACKWASH_LAST_ON",
+    "BACKWASH_LAST_OFF",
+    "PUMP_LAST_ON",
+    "PUMP_LAST_OFF",
+]
+
 class VioletDeviceSensor(CoordinatorEntity, SensorEntity):
     """Representation of a Violet Device Sensor."""
 
@@ -12,17 +23,19 @@ class VioletDeviceSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._key = key
         self._icon = icon
-        self._config_entry = config_entry  # Store config_entry
+        self._config_entry = config_entry
         self._attr_name = f"Violet {self._key}"
         self._attr_unique_id = f"{DOMAIN}_{self._key}"
         self._state = None  # Cache the sensor state
+        self._has_logged_none_state = False  # Avoid logging multiple warnings for None states
 
     @property
     def state(self):
         """Return the state of the sensor."""
         self._state = self._get_sensor_state()
-        if self._state is None:
+        if self._state is None and not self._has_logged_none_state:
             _LOGGER.warning(f"Sensor {self._key} returned None as its state.")
+            self._has_logged_none_state = True
         return self._state
 
     @property
@@ -54,10 +67,9 @@ class VioletDeviceSensor(CoordinatorEntity, SensorEntity):
     @property
     def unit_of_measurement(self):
         """Return the unit of measurement."""
-        unit = self._get_unit_for_key(self._key)
-        if unit is None:
-            _LOGGER.debug(f"No unit required for sensor {self._key}.")
-        return unit
+        if self._key in NO_UNIT_SENSORS:
+            return None  # These sensors should not have a unit of measurement
+        return self._get_unit_for_key(self._key)
 
     def _get_sensor_state(self):
         """Helper method to retrieve the current sensor state from the coordinator."""
@@ -98,21 +110,12 @@ class VioletDeviceSensor(CoordinatorEntity, SensorEntity):
             "PUMP_RPM_1": "RPM",
             "PUMP_RPM_2": "RPM",
             "PUMP_RPM_3": "RPM",
-            "SYSTEM_carrier_alive_count": None,
-            "SYSTEM_ext1module_alive_count": None,
-            "SYSTEM_dosagemodule_alive_count": None,
             "DOS_1_CL_DAILY_DOSING_AMOUNT_ML": "mL",
             "DOS_1_CL_TOTAL_CAN_AMOUNT_ML": "mL",
             "DOS_2_ELO_DAILY_DOSING_AMOUNT_ML": "mL",
             "DOS_2_ELO_TOTAL_CAN_AMOUNT_ML": "mL",
             "DOS_4_PHM_DAILY_DOSING_AMOUNT_ML": "mL",
             "DOS_4_PHM_TOTAL_CAN_AMOUNT_ML": "mL",
-            "PUMP_RUNTIME": None,
-            "SOLAR_RUNTIME": None,
-            "HEATER_RUNTIME": None,
-            "BACKWASH_RUNTIME": None,
-            "OMNI_DC0_RUNTIME": None,
-            "OMNI_DC1_RUNTIME": None,
             "CPU_TEMP": "°C",
             "SYSTEM_MEMORY": "MB",
             "LOAD_AVG": "%",
@@ -132,20 +135,6 @@ class VioletDeviceSensor(CoordinatorEntity, SensorEntity):
             "CHLORINE_LEVEL": "ppm",
             "BROMINE_LEVEL": "ppm",
         }
-       # Return None for sensors that are timestamps or statuses
-        no_unit_sensors = [
-            "SOLAR_LAST_OFF",
-            "HEATER_LAST_ON",
-            "HEATER_LAST_OFF",
-            "BACKWASH_LAST_ON",
-            "BACKWASH_LAST_OFF",
-            "PUMP_LAST_ON",
-            "PUMP_LAST_OFF",
-        ]
-
-        if key in no_unit_sensors:
-            return None
-
         return units.get(key, None)
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
