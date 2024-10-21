@@ -28,7 +28,6 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Violet Pool Controller from a config entry."""
     
-    # Retrieve configuration data from the config entry
     config = {
         "ip_address": entry.data[CONF_API_URL],
         "polling_interval": entry.data.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL),
@@ -38,34 +37,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "password": entry.data.get(CONF_PASSWORD)
     }
 
-    # Log configuration data
     _LOGGER.info(f"Setting up Violet Pool Controller with config: {config}")
 
-    # Get a shared aiohttp session
     session = aiohttp_client.async_get_clientsession(hass)
 
-    # Create a coordinator for data updates
     coordinator = VioletDataUpdateCoordinator(
         hass,
         config=config,
         session=session,
     )
 
-    # Log before first data fetch
-    _LOGGER.debug("First data fetch for Violet Pool Controller is being performed")
-
     try:
-        # Ensure the first data fetch happens during setup
         await coordinator.async_config_entry_first_refresh()
     except Exception as err:
         _LOGGER.error(f"First data fetch failed: {err}")
         return False
 
-    # Store the coordinator in hass.data for access by platform files
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
-    # Forward setup to platforms (e.g., switch, sensor, binary sensor)
     await hass.config_entries.async_forward_entry_setups(entry, ["switch", "sensor", "binary_sensor"])
 
     _LOGGER.info("Violet Pool Controller setup completed successfully")
@@ -74,12 +64,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(
         entry, ["switch", "sensor", "binary_sensor"]
     )
 
-    # Remove the coordinator from hass.data
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
 
@@ -91,7 +79,6 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching Violet Pool Controller data and dynamically adding new entities."""
 
     def __init__(self, hass: HomeAssistant, config: Dict[str, Any], session: aiohttp.ClientSession) -> None:
-        """Initialize the coordinator."""
         self.hass = hass
         self.ip_address: str = config["ip_address"]
         self.username: str = config["username"]
@@ -100,7 +87,7 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
         self.use_ssl: bool = config["use_ssl"]
         self.device_id: int = config["device_id"]
 
-        self._existing_entities: Dict[str, VioletEntity] = {}  # Track existing entities and their states
+        self._existing_entities: Dict[str, VioletEntity] = {}
 
         _LOGGER.info(f"Initializing data coordinator for device {self.device_id} (IP: {self.ip_address}, SSL: {self.use_ssl})")
 
@@ -112,7 +99,6 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
     async def _async_update_data(self) -> Dict[str, Any]:
-        """Fetch data from the Violet Pool Controller API and detect new or changed entities."""
         retries = 3
         for attempt in range(retries):
             try:
@@ -128,6 +114,10 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
                         response.raise_for_status()
                         data = await response.json()
                         _LOGGER.debug(f"Data received: {data}")
+                        
+                        # Validate response before processing
+                        if not isinstance(data, dict) or "status" not in data:
+                            raise UpdateFailed(f"Invalid response structure: {data}")
                         
                         # Check for new entities or changes
                         self._detect_new_or_changed_entities(data)
@@ -146,7 +136,7 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.error(f"Unexpected error while fetching data from {self.ip_address}: {err}")
                 raise UpdateFailed(f"Unexpected error (Device ID: {self.device_id}, IP: {self.ip_address}): {err}")
 
-            await asyncio.sleep(2 ** attempt)  # Exponential backoff on retries
+            await asyncio.sleep(2 ** attempt)
 
     def _detect_new_or_changed_entities(self, data: Dict[str, Any]) -> None:
         """Detect and add new or changed entities based on the received data."""
@@ -157,7 +147,7 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
             if self._existing_entities[entity].state != data[entity]
         }
 
-        # Create new entities dynamically
+        # Handle new entities
         if new_entities:
             _LOGGER.info(f"New entities detected: {new_entities}")
             for entity in new_entities:
@@ -170,16 +160,20 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
                 self._update_existing_entity(entity, new_value)
 
     def _create_new_entity(self, entity: str, value: Any) -> None:
-        """Create and register a new entity dynamically."""
+        """Create and register a new entity dynamically, with proper classification."""
         _LOGGER.info(f"Creating new entity: {entity} with value: {value}")
         
-        # Create a new entity object (for example, a sensor or switch)
-        new_entity = VioletEntity(self, entity, value)
-        
-        # Register the entity with Home Assistant
+        # Entity Type Classification and Icon Assignment
+        if "switch" in entity:
+            icon = "mdi:power"
+        elif "sensor" in entity:
+            icon = "mdi:gauge"
+        else:
+            icon = "mdi:alert-circle-outline"  # Default for unknown entities
+
+        new_entity = VioletEntity(self, entity, value, icon)
         self.hass.helpers.entity_platform.async_add_entities([new_entity], update_before_add=True)
         
-        # Track the entity
         self._existing_entities[entity] = new_entity
 
     def _update_existing_entity(self, entity: str, new_value: Any) -> None:
@@ -197,11 +191,12 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
 class VioletEntity(CoordinatorEntity, Entity):
     """Representation of a dynamically created entity."""
     
-    def __init__(self, coordinator: VioletDataUpdateCoordinator, entity_id: str, value: Any):
+    def __init__(self, coordinator: VioletDataUpdateCoordinator, entity_id: str, value: Any, icon: str):
         """Initialize the entity."""
         super().__init__(coordinator)
         self.entity_id = entity_id
         self._state = value
+        self._icon = icon
 
     @property
     def state(self):
@@ -213,8 +208,12 @@ class VioletEntity(CoordinatorEntity, Entity):
         """Return the name of the entity."""
         return self.entity_id
 
+    @property
+    def icon(self):
+        """Return the icon for the entity."""
+        return self._icon
+
     async def async_update(self):
         """Update the entity state."""
-        # Fetch the latest state and update the entity
         self._state = self.coordinator.data.get(self.entity_id)
         self.async_write_ha_state()
