@@ -2,12 +2,10 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import aiohttp_client
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, CoordinatorEntity, UpdateFailed
-from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from datetime import timedelta
 import async_timeout
 import aiohttp
-import asyncio
 from typing import Any, Dict
 
 from .const import (
@@ -53,9 +51,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error(f"First data fetch failed: {err}")
         return False
 
+    # Store the coordinator in hass.data for access by platform files
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
+    # Forward setup to platforms (e.g., switch, sensor, binary sensor)
     await hass.config_entries.async_forward_entry_setups(entry, ["switch", "sensor", "binary_sensor"])
 
     _LOGGER.info("Violet Pool Controller setup completed successfully")
@@ -64,6 +64,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(
         entry, ["switch", "sensor", "binary_sensor"]
     )
@@ -76,9 +77,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 class VioletDataUpdateCoordinator(DataUpdateCoordinator):
-    """Class to manage fetching Violet Pool Controller data and dynamically adding new entities."""
+    """Class to manage fetching Violet Pool Controller data."""
 
     def __init__(self, hass: HomeAssistant, config: Dict[str, Any], session: aiohttp.ClientSession) -> None:
+        """Initialize the coordinator."""
         self.hass = hass
         self.ip_address: str = config["ip_address"]
         self.username: str = config["username"]
@@ -86,8 +88,6 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
         self.session: aiohttp.ClientSession = session
         self.use_ssl: bool = config["use_ssl"]
         self.device_id: int = config["device_id"]
-
-        self._existing_entities: Dict[str, VioletEntity] = {}
 
         _LOGGER.info(f"Initializing data coordinator for device {self.device_id} (IP: {self.ip_address}, SSL: {self.use_ssl})")
 
@@ -99,6 +99,7 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
     async def _async_update_data(self) -> Dict[str, Any]:
+        """Fetch data from the Violet Pool Controller API."""
         retries = 3
         for attempt in range(retries):
             try:
@@ -119,9 +120,6 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
                         if not isinstance(data, dict) or "IMP1_value" not in data:
                             raise UpdateFailed(f"Unexpected response structure: {data}")
                         
-                        # Check for new entities or changes
-                        self._detect_new_or_changed_entities(data)
-
                         return data
 
             except aiohttp.ClientError as client_err:
@@ -137,83 +135,3 @@ class VioletDataUpdateCoordinator(DataUpdateCoordinator):
                 raise UpdateFailed(f"Unexpected error (Device ID: {self.device_id}, IP: {self.ip_address}): {err}")
 
             await asyncio.sleep(2 ** attempt)
-
-    def _detect_new_or_changed_entities(self, data: Dict[str, Any]) -> None:
-        """Detect and add new or changed entities based on the received data."""
-        new_entities = set(data.keys()) - set(self._existing_entities.keys())
-        changed_entities = {
-            entity: data[entity]
-            for entity in self._existing_entities
-            if self._existing_entities[entity].state != data[entity]
-        }
-
-        # Handle new entities
-        if new_entities:
-            _LOGGER.info(f"New entities detected: {new_entities}")
-            for entity in new_entities:
-                self._create_new_entity(entity, data[entity])
-
-        # Update the state of existing entities
-        if changed_entities:
-            _LOGGER.info(f"Changed entities detected: {changed_entities}")
-            for entity, new_value in changed_entities.items():
-                self._update_existing_entity(entity, new_value)
-
-    def _create_new_entity(self, entity: str, value: Any) -> None:
-        """Create and register a new entity dynamically, with proper classification."""
-        _LOGGER.info(f"Creating new entity: {entity} with value: {value}")
-        
-        # Entity Type Classification and Icon Assignment
-        if "switch" in entity:
-            icon = "mdi:power"
-        elif "sensor" in entity:
-            icon = "mdi:gauge"
-        else:
-            icon = "mdi:alert-circle-outline"  # Default for unknown entities
-
-        new_entity = VioletEntity(self, entity, value, icon)
-        self.hass.helpers.entity_platform.async_add_entities([new_entity], update_before_add=True)
-        
-        self._existing_entities[entity] = new_entity
-
-    def _update_existing_entity(self, entity: str, new_value: Any) -> None:
-        """Update the state of an existing entity."""
-        _LOGGER.info(f"Updating entity: {entity} to new value: {new_value}")
-        
-        existing_entity = self._existing_entities.get(entity)
-        if existing_entity:
-            existing_entity.state = new_value
-            existing_entity.async_write_ha_state()
-        else:
-            _LOGGER.warning(f"Entity {entity} not found for update")
-
-
-class VioletEntity(CoordinatorEntity, Entity):
-    """Representation of a dynamically created entity."""
-    
-    def __init__(self, coordinator: VioletDataUpdateCoordinator, entity_id: str, value: Any, icon: str):
-        """Initialize the entity."""
-        super().__init__(coordinator)
-        self.entity_id = entity_id
-        self._state = value
-        self._icon = icon
-
-    @property
-    def state(self):
-        """Return the state of the entity."""
-        return self._state
-
-    @property
-    def name(self):
-        """Return the name of the entity."""
-        return self.entity_id
-
-    @property
-    def icon(self):
-        """Return the icon for the entity."""
-        return self._icon
-
-    async def async_update(self):
-        """Update the entity state."""
-        self._state = self.coordinator.data.get(self.entity_id)
-        self.async_write_ha_state()
