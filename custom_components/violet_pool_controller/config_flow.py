@@ -1,12 +1,15 @@
 import logging
 import aiohttp
 import async_timeout
+import asyncio  # Hinzugefügt
+from datetime import datetime, timedelta  # Hinzugefügt
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant  # Verwende den aktuellen Typ 'HomeAssistant'
+from homeassistant.core import callback, HomeAssistant  # Aktualisiert
 from homeassistant.helpers import aiohttp_client
-from datetime import datetime, timedelta  # Importiere datetime und timedelta
-import asyncio  # Importiere asyncio
+# Entferne den veralteten Import
+# from homeassistant.helpers.typing import ConfigType, HomeAssistantType
+from homeassistant.components.mqtt import async_publish
 import re  # Für die Validierung der Firmware-Version
 from .const import (
     DOMAIN,
@@ -27,7 +30,7 @@ from .const import (
     DEFAULT_USE_SSL,
     DEFAULT_MQTT_PORT,
     DEFAULT_MQTT_ENABLED,
-    API_READINGS,  # API endpoint
+    API_READINGS,  # API-Endpunkt
 )
 
 # Timeout limits as constants
@@ -268,7 +271,7 @@ class VioletOptionsFlow(config_entries.OptionsFlow):
         )
 
 # Example of MQTT publishing function (if MQTT is enabled)
-async def publish_mqtt_message(hass: HomeAssistant, topic: str, payload: str):
+async def publish_mqtt_message(hass: HomeAssistantType, topic: str, payload: str):
     """Publish a message to the MQTT broker."""
     if hass.data[DOMAIN].get(CONF_MQTT_ENABLED, False):
         mqtt_broker = hass.data[DOMAIN].get(CONF_MQTT_BROKER)
@@ -288,3 +291,4 @@ async def publish_mqtt_message(hass: HomeAssistant, topic: str, payload: str):
             retain=False
         )
         _LOGGER.info(f"Published message to MQTT topic {full_topic}: {payload}")
+
