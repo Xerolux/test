@@ -23,15 +23,20 @@ class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
             "sw_version": self.coordinator.data.get('fw') or self.coordinator.data.get('SW_VERSION', 'Unknown'),
             "configuration_url": f"http://{self._config_entry.data.get('host', 'Unknown IP')}",
         }
+        self._has_logged_none_state = False  # To avoid repeated logs
 
     def _get_sensor_state(self):
         """Helper method to retrieve the current sensor state from the coordinator."""
         state = self.coordinator.data.get(self._key, None)
+        
         if state is None:
-            # Log once per missing state instead of logging repeatedly
-            _LOGGER.warning(f"Sensor {self._key} returned None as its state. Using default 'OFF' state.")
+            if not self._has_logged_none_state:
+                _LOGGER.warning(f"Sensor {self._key} returned None as its state. Defaulting to 'OFF'.")
+                self._has_logged_none_state = True  # Log once
             return False  # Default to OFF when state is None
-        return state == 1
+        else:
+            self._has_logged_none_state = False  # Reset log flag if state is valid
+            return state == 1
 
     @property
     def is_on(self):
@@ -46,7 +51,10 @@ class VioletBinarySensor(CoordinatorEntity, BinarySensorEntity):
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up Violet Device binary sensors from a config entry."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
-    
+
+    # Log the retrieved data for debugging purposes
+    _LOGGER.debug(f"Violet Pool Controller API data: {coordinator.data}")
+
     # Initialize sensors from the BINARY_SENSORS list
     binary_sensors = [
         VioletBinarySensor(coordinator, sensor["key"], sensor["icon"], config_entry)
