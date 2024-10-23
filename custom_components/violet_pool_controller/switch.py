@@ -152,8 +152,8 @@ class VioletSwitch(CoordinatorEntity, SwitchEntity):
             "manufacturer": "PoolDigital GmbH & Co. KG",
             "model": self.coordinator.data.get('model', 'Violet Model X'),
             "sw_version": self.coordinator.data.get('fw') or self.coordinator.data.get('SW_VERSION', 'Unknown'),
-            "mac_address": self.coordinator.data.get('mac_address', 'Unknown'),
-            "serial_number": self.coordinator.data.get('serial_number', 'Unknown'),
+            "hw_serial": self.coordinator.data.get('HW_SERIAL_CARRIER', 'Unknown'),
+            "hw_version": self.coordinator.data.get('HW_VERSION_CARRIER', 'Unknown'),
         }
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
